@@ -1,0 +1,26 @@
+[package]
+name = "serv"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+brotli = "9.0.0"
+clap = { version = "4.6.6", features = ["derive"] }
+env_logger = "0.11.11"
+flate2 = "1.1.10"
+http-body-util = "0.1.5"
+httpdate = "1.0.3"
+hyper = { version = "1.11.1", default-features = false, features = ["server", "http1"] }
+hyper-util = { version = "0.1.20", default-features = false, features = ["tokio", "server"] }
+log = "0.4.34"
+mime_guess = "2.0.5"
+percent-encoding = "2.3.2"
+tokio = { version = "1.53.1", features = ["rt-multi-thread", "net", "fs", "io-util", "macros", "signal"] }
+tokio-util = { version = "0.7.19", features = ["io"] }
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true
