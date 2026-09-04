@@ -1,6 +1,9 @@
-use std::convert::Infallible;
-use std::net::SocketAddr;
+mod cli;
 
+use std::convert::Infallible;
+use std::net::{SocketAddr, ToSocketAddrs};
+
+use clap::Parser;
 use http_body_util::Full;
 use hyper::body::Bytes;
 use hyper::server::conn::http1;
@@ -9,15 +12,41 @@ use hyper::{Request, Response};
 use hyper_util::rt::TokioIo;
 use tokio::net::TcpListener;
 
+use crate::cli::Args;
+
 async fn handle(_req: Request<hyper::body::Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
     Ok(Response::new(Full::new(Bytes::from_static(b"serv"))))
 }
 
+/// Resolve `--host`/`--port` into an address, accepting names such as `localhost`.
+fn resolve_addr(host: &str, port: u16) -> std::io::Result<SocketAddr> {
+    (host, port).to_socket_addrs()?.next().ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("could not resolve host `{host}`"),
+        )
+    })
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
-    let listener = TcpListener::bind(addr).await?;
-    println!("listening on http://{addr}");
+    let args = Args::parse();
+
+    let root = args.dir.canonicalize().map_err(|e| {
+        format!("cannot serve `{}`: {e}", args.dir.display())
+    })?;
+    if !root.is_dir() {
+        return Err(format!("`{}` is not a directory", root.display()).into());
+    }
+
+    let addr = resolve_addr(&args.host, args.port)?;
+    let listener = TcpListener::bind(addr).await.map_err(|e| {
+        format!("cannot listen on {addr}: {e}")
+    })?;
+
+    println!("serv {}", env!("CARGO_PKG_VERSION"));
+    println!("  root  {}", root.display());
+    println!("  url   http://{addr}/");
 
     loop {
         let (stream, _) = listener.accept().await?;
