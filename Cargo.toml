@@ -8,6 +8,7 @@ brotli = "9.0.0"
 clap = { version = "4.6.6", features = ["derive"] }
 env_logger = "0.11.11"
 flate2 = "1.1.10"
+futures-core = "0.3.34"
 http-body-util = "0.1.5"
 httpdate = "1.0.3"
 hyper = { version = "1.11.1", default-features = false, features = ["server", "http1"] }

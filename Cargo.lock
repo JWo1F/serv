@@ -574,6 +574,7 @@ dependencies = [
  "clap",
  "env_logger",
  "flate2",
+ "futures-core",
  "http-body-util",
  "httpdate",
  "hyper",
