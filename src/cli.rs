@@ -26,7 +26,7 @@ pub struct Args {
     pub host: String,
 
     /// Port to listen on
-    #[arg(short, long, value_name = "PORT", default_value_t = 3000)]
+    #[arg(short, long, value_name = "PORT", default_value_t = 8010)]
     pub port: u16,
 
     /// Serve a single-page app: unmatched paths fall back to this file
