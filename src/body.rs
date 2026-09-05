@@ -14,39 +14,41 @@ use tokio_util::io::ReaderStream;
 pub type Body = BoxBody<Bytes, io::Error>;
 
 pub fn empty() -> Body {
-    full(Bytes::new())
+  full(Bytes::new())
 }
 
 pub fn full(bytes: impl Into<Bytes>) -> Body {
-    Full::new(bytes.into()).map_err(|never| match never {}).boxed()
+  Full::new(bytes.into())
+    .map_err(|never| match never {})
+    .boxed()
 }
 
 /// Stream a (possibly partial) file straight from disk, so serving a large
 /// video never means holding it in memory.
 pub fn file(file: Take<File>) -> Body {
-    FileBody {
-        inner: Box::pin(ReaderStream::new(file)),
-    }
-    .boxed()
+  FileBody {
+    inner: Box::pin(ReaderStream::new(file)),
+  }
+  .boxed()
 }
 
 struct FileBody {
-    inner: Pin<Box<ReaderStream<Take<File>>>>,
+  inner: Pin<Box<ReaderStream<Take<File>>>>,
 }
 
 impl HttpBody for FileBody {
-    type Data = Bytes;
-    type Error = io::Error;
+  type Data = Bytes;
+  type Error = io::Error;
 
-    fn poll_frame(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Option<Result<Frame<Bytes>, io::Error>>> {
-        match self.inner.as_mut().poll_next(cx) {
-            Poll::Ready(Some(Ok(chunk))) => Poll::Ready(Some(Ok(Frame::data(chunk)))),
-            Poll::Ready(Some(Err(err))) => Poll::Ready(Some(Err(err))),
-            Poll::Ready(None) => Poll::Ready(None),
-            Poll::Pending => Poll::Pending,
-        }
+  fn poll_frame(
+    mut self: Pin<&mut Self>,
+    cx: &mut Context<'_>,
+  ) -> Poll<Option<Result<Frame<Bytes>, io::Error>>> {
+    match self.inner.as_mut().poll_next(cx) {
+      Poll::Ready(Some(Ok(chunk))) => Poll::Ready(Some(Ok(Frame::data(chunk)))),
+      Poll::Ready(Some(Err(err))) => Poll::Ready(Some(Err(err))),
+      Poll::Ready(None) => Poll::Ready(None),
+      Poll::Pending => Poll::Pending,
     }
+  }
 }
