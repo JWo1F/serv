@@ -2,6 +2,7 @@ mod body;
 mod cli;
 mod config;
 mod file;
+mod pages;
 mod path;
 mod serve;
 

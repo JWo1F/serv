@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>Index of {self.crumbs.last().map(|c| c.href.as_str()).unwrap_or("/")}</title>
+    <style>{@html self.style()}</style>
+  </head>
+  <body>
+    <main class="sheet">
+      <header class="slug ink">
+        <span><b>serv</b> · local development server</span>
+        <span class="mark">{self.tally()}</span>
+      </header>
+      <div class="rule ink"></div>
+
+      <h1 class="title ink">
+        Index of
+        <span class="path">{#for crumb in &self.crumbs}<a href={crumb.href.as_str()}>{crumb.label}</a>{/for}</span>
+      </h1>
+
+      <ul class="index ink">
+        {#if let Some(parent) = &self.parent}
+          <li>
+            <a class="entry entry--up" href={parent.as_str()}>
+              <span class="caret">↑</span>
+              <span class="name">up one level</span>
+              <span class="leader"></span>
+              <span class="meta"></span>
+            </a>
+          </li>
+        {/if}
+        {#for entry in &self.entries}
+          <li>
+            <a class={@tokens("entry", "entry--dir": entry.is_dir)} href={entry.href.as_str()}>
+              <span class="caret">{#if entry.is_dir}▸{:else}·{/if}</span>
+              <span class="name">{entry.name}</span>
+              <span class="leader"></span>
+              <span class="meta">
+                <span class="size">{entry.size}</span>
+                <span class="when">{entry.modified}</span>
+              </span>
+            </a>
+          </li>
+        {/for}
+      </ul>
+
+      {#if self.entries.is_empty()}
+        <p class="empty ink">This folder is empty.</p>
+      {/if}
+
+      <footer class="colophon ink">
+        <span>serv {env!("CARGO_PKG_VERSION")}</span>
+        <span>{self.root}</span>
+      </footer>
+    </main>
+  </body>
+</html>

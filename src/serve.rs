@@ -4,12 +4,14 @@ use std::io;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use damask::Component;
 use hyper::body::Incoming;
 use hyper::header::{ACCEPT, CONTENT_TYPE, LOCATION};
 use hyper::{Method, Request, Response, StatusCode};
 
 use crate::body::{self, Body};
 use crate::config::Config;
+use crate::pages::listing;
 use crate::{file, path};
 
 pub async fn handle(
@@ -57,7 +59,8 @@ async fn route(req: &Request<Incoming>, config: &Config) -> io::Result<Response<
     if is_file(&index).await {
       return file::send(&index, req.method(), StatusCode::OK).await;
     }
-    return miss(req, config).await;
+    let index = listing::read(&target, url_path, &config.root).await?;
+    return Ok(html(StatusCode::OK, req.method(), index.render()));
   }
 
   if !config.ext {
@@ -137,6 +140,21 @@ fn redirect(req: &Request<Incoming>, location: String) -> Response<Body> {
 
 fn not_found() -> Response<Body> {
   text(StatusCode::NOT_FOUND, "not found")
+}
+
+fn html(status: StatusCode, method: &Method, markup: String) -> Response<Body> {
+  let len = markup.len();
+  let body = if method == Method::HEAD {
+    body::empty()
+  } else {
+    body::full(markup)
+  };
+  Response::builder()
+    .status(status)
+    .header(CONTENT_TYPE, "text/html; charset=utf-8")
+    .header(hyper::header::CONTENT_LENGTH, len)
+    .body(body)
+    .expect("valid response")
 }
 
 fn text(status: StatusCode, message: &'static str) -> Response<Body> {

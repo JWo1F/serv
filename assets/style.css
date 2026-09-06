@@ -1,0 +1,312 @@
+/* serv — "compositor's index"
+   A print-shop specimen sheet: warm paper, hand-set numerals, one vermilion ink.
+   No webfonts, no network: everything here has to work on a plane. */
+
+:root {
+  --paper: #f2ece1;
+  --paper-sunk: #e7dfd0;
+  --ink: #1c1916;
+  --ink-soft: #6a6053;
+  --ink-faint: #a2988a;
+  --vermilion: #cc3d20;
+  --rule: rgba(28, 25, 22, 0.16);
+  --rule-strong: rgba(28, 25, 22, 0.42);
+
+  --serif: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino,
+    Charter, "Bitstream Charter", Georgia, serif;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, "Cascadia Mono",
+    "DejaVu Sans Mono", monospace;
+
+  --sheet: 68rem;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #16140f;
+    --paper-sunk: #1e1b15;
+    --ink: #ece4d4;
+    --ink-soft: #9a9081;
+    --ink-faint: #5f584c;
+    --vermilion: #ff5f3c;
+    --rule: rgba(236, 228, 212, 0.16);
+    --rule-strong: rgba(236, 228, 212, 0.38);
+  }
+}
+
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  padding: clamp(1.25rem, 4vw, 3.5rem);
+  background-color: var(--paper);
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: 17px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Paper grain. A single inline turbulence, dialled almost to nothing. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.35;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='.42'/%3E%3C/svg%3E");
+}
+
+@media (prefers-color-scheme: dark) {
+  body::before { mix-blend-mode: screen; opacity: 0.1; }
+}
+
+/* ── the sheet ─────────────────────────────────────────────── */
+
+.sheet {
+  position: relative;
+  z-index: 1;
+  max-width: var(--sheet);
+  margin: 0 auto;
+  padding: clamp(1.5rem, 3.5vw, 3rem);
+}
+
+/* Crop marks, the way a printer would trim the page. */
+.sheet::before,
+.sheet::after {
+  content: "";
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border: 0 solid var(--rule-strong);
+  pointer-events: none;
+}
+.sheet::before { top: 0; left: 0; border-top-width: 1px; border-left-width: 1px; }
+.sheet::after { bottom: 0; right: 0; border-bottom-width: 1px; border-right-width: 1px; }
+
+.slug {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.slug b { font-weight: 600; color: var(--ink); }
+.slug .mark { color: var(--vermilion); }
+
+.rule {
+  height: 1px;
+  margin: 0.9rem 0 0;
+  background: var(--ink);
+  opacity: 0.75;
+}
+.rule--hair { background: var(--rule); opacity: 1; margin: 0; }
+
+/* ── 404 ───────────────────────────────────────────────────── */
+
+.plate {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: clamp(1.5rem, 4vw, 3rem);
+  padding: clamp(2.5rem, 8vw, 6rem) 0 clamp(2rem, 5vw, 4rem);
+}
+
+.numerals {
+  font-family: var(--serif);
+  font-size: clamp(7rem, 25vw, 19rem);
+  line-height: 0.78;
+  letter-spacing: 0.02em;
+  margin: 0;
+  color: transparent;
+  -webkit-text-stroke: 2px var(--ink);
+  text-align: center;
+  user-select: none;
+}
+
+.numerals em {
+  font-style: normal;
+  -webkit-text-stroke-color: var(--vermilion);
+  display: inline-block;
+  /* the missing sort, seated a hair low in the forme */
+  transform: translateY(0.045em) rotate(-3deg);
+}
+
+.legend {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.1rem;
+  max-width: 40rem;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.legend h1 {
+  margin: 0;
+  font-weight: 400;
+  font-size: clamp(1.35rem, 3.2vw, 1.9rem);
+  font-style: italic;
+  letter-spacing: -0.01em;
+}
+
+.legend p { margin: 0; color: var(--ink-soft); }
+
+.address {
+  justify-self: center;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  padding: 0.5rem 0.85rem;
+  background: var(--paper-sunk);
+  border: 1px solid var(--rule);
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  color: var(--ink);
+}
+.address span { color: var(--ink-faint); }
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.4rem;
+  justify-content: center;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.actions a {
+  color: var(--ink);
+  text-decoration: none;
+  padding-bottom: 2px;
+  border-bottom: 1px solid var(--rule-strong);
+  transition: color 0.15s, border-color 0.15s;
+}
+.actions a:hover { color: var(--vermilion); border-color: var(--vermilion); }
+
+/* ── index ─────────────────────────────────────────────────── */
+
+.title {
+  margin: 1.8rem 0 0;
+  font-size: clamp(1.6rem, 4vw, 2.4rem);
+  font-weight: 400;
+  letter-spacing: -0.015em;
+}
+
+.title .path {
+  font-family: var(--mono);
+  font-size: 0.62em;
+  color: var(--ink-soft);
+}
+.title .path a { color: var(--ink-soft); text-decoration: none; }
+.title .path a:hover { color: var(--vermilion); }
+.title .path b { color: var(--ink); font-weight: 500; }
+
+.index {
+  list-style: none;
+  margin: 1.4rem 0 0;
+  padding: 0;
+}
+
+.index li { border-bottom: 1px solid var(--rule); }
+
+.entry {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0.55rem 0.4rem 0.5rem;
+  text-decoration: none;
+  color: inherit;
+}
+
+.entry .caret {
+  flex: none;
+  width: 1.1rem;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--ink-faint);
+  transition: color 0.12s, transform 0.12s;
+}
+
+.entry .name {
+  font-family: var(--mono);
+  font-size: 0.92rem;
+  overflow-wrap: anywhere;
+}
+
+.entry .leader {
+  flex: 1 1 auto;
+  min-width: 1.5rem;
+  height: 0.55em;
+  border-bottom: 1px dotted var(--rule-strong);
+  opacity: 0.6;
+}
+
+.entry .meta {
+  flex: none;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+.entry .meta .size { display: inline-block; min-width: 4.5rem; text-align: right; }
+.entry .meta .when { display: inline-block; min-width: 7.5rem; text-align: right; }
+
+.entry:hover { background: var(--paper-sunk); }
+.entry:hover .caret { color: var(--vermilion); transform: translateX(2px); }
+.entry:hover .name { color: var(--vermilion); }
+
+.entry--dir .name { font-weight: 600; }
+.entry--up .name { font-style: italic; font-family: var(--serif); color: var(--ink-soft); }
+
+.colophon {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-top: 1.6rem;
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.empty {
+  margin: 2.5rem 0;
+  text-align: center;
+  font-style: italic;
+  color: var(--ink-soft);
+}
+
+@media (max-width: 34rem) {
+  .entry .meta .when { display: none; }
+  .entry .meta .size { min-width: 3.5rem; }
+}
+
+/* ── ink laid down, one line at a time ─────────────────────── */
+
+@media (prefers-reduced-motion: no-preference) {
+  .ink {
+    animation: press 0.55s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+  }
+  .ink:nth-child(1) { animation-delay: 0.02s; }
+  .ink:nth-child(2) { animation-delay: 0.08s; }
+  .ink:nth-child(3) { animation-delay: 0.14s; }
+  .ink:nth-child(4) { animation-delay: 0.2s; }
+  .ink:nth-child(5) { animation-delay: 0.26s; }
+}
+
+@keyframes press {
+  from { opacity: 0; transform: translateY(0.4rem); }
+  to { opacity: 1; transform: none; }
+}

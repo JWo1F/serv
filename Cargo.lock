@@ -183,6 +183,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "damask"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "28e8650ffb6fece3849055c1309f028f68c50ca292ab9b58372bf0eaa87dbc77"
+dependencies = [
+ "damask-macros",
+]
+
+[[package]]
+name = "damask-macros"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c721d62d1be192e5058837543a0b4bbbc3e1357c18b0da59383d1090da0fc3b9"
+dependencies = [
+ "damask-template",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
+name = "damask-template"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "18928a950a0036ba348e63c68f79fd6edf361bec5fc6461f548090240cdb7ed8"
+dependencies = [
+ "proc-macro2",
+]
+
+[[package]]
 name = "defmt"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -572,6 +602,7 @@ version = "0.1.0"
 dependencies = [
  "brotli",
  "clap",
+ "damask",
  "env_logger",
  "flate2",
  "futures-core",
