@@ -6,12 +6,12 @@ use std::sync::Arc;
 
 use damask::Component;
 use hyper::body::Incoming;
-use hyper::header::{ACCEPT, CONTENT_TYPE, LOCATION};
+use hyper::header::{ACCEPT, CONTENT_TYPE, HOST, LOCATION};
 use hyper::{Method, Request, Response, StatusCode};
 
 use crate::body::{self, Body};
 use crate::config::Config;
-use crate::pages::listing;
+use crate::pages::{listing, not_found::NotFound};
 use crate::{file, path};
 
 pub async fn handle(
@@ -82,7 +82,7 @@ async fn miss(req: &Request<Incoming>, config: &Config) -> io::Result<Response<B
   {
     return file::send(spa, req.method(), StatusCode::OK).await;
   }
-  Ok(not_found())
+  not_found(req, config).await
 }
 
 /// Only navigations get the SPA shell — a missing script should stay a 404
@@ -138,8 +138,23 @@ fn redirect(req: &Request<Incoming>, location: String) -> Response<Body> {
     .expect("valid response")
 }
 
-fn not_found() -> Response<Body> {
-  text(StatusCode::NOT_FOUND, "not found")
+/// The not-found page. A `--not-found` file is read on every miss, so editing it
+/// shows up on the next reload just like any other file serv hands out.
+async fn not_found(req: &Request<Incoming>, config: &Config) -> io::Result<Response<Body>> {
+  if let Some(page) = &config.not_found
+    && is_file(page).await
+  {
+    return file::send(page, req.method(), StatusCode::NOT_FOUND).await;
+  }
+
+  let host = req
+    .headers()
+    .get(HOST)
+    .and_then(|value| value.to_str().ok())
+    .unwrap_or("localhost");
+  let page = NotFound::new(req.uri().path(), host);
+
+  Ok(html(StatusCode::NOT_FOUND, req.method(), page.render()))
 }
 
 fn html(status: StatusCode, method: &Method, markup: String) -> Response<Body> {

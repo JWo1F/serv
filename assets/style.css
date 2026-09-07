@@ -117,13 +117,13 @@ body::before {
 .plate {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: clamp(1.5rem, 4vw, 3rem);
-  padding: clamp(2.5rem, 8vw, 6rem) 0 clamp(2rem, 5vw, 4rem);
+  gap: clamp(1.25rem, 3vw, 2.25rem);
+  padding: clamp(1.5rem, 5vw, 4rem) 0 clamp(1.25rem, 3vw, 2.5rem);
 }
 
 .numerals {
   font-family: var(--serif);
-  font-size: clamp(7rem, 25vw, 19rem);
+  font-size: clamp(5.5rem, 20vw, 15rem);
   line-height: 0.78;
   letter-spacing: 0.02em;
   margin: 0;

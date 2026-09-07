@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>404 — not on file</title>
+    <style>{@html self.style()}</style>
+  </head>
+  <body>
+    <main class="sheet">
+      <header class="slug ink">
+        <span><b>serv</b> · local development server</span>
+        <span class="mark">no. 404</span>
+      </header>
+      <div class="rule ink"></div>
+
+      <section class="plate ink">
+        <p class="numerals" aria-label="404">4<em>0</em>4</p>
+
+        <div class="legend">
+          <h1>Nothing is set at this address.</h1>
+          <p class="address"><span>{self.host}</span>{self.path}</p>
+          <p>
+            The file has not been composed yet, or it is spelled differently on
+            disk. serv reads the folder fresh on every request — add the file and
+            reload.
+          </p>
+          <nav class="actions">
+            <a href="/">Back to the index</a>
+            <a href={self.parent.as_str()}>Up one level</a>
+          </nav>
+        </div>
+      </section>
+
+      <div class="rule rule--hair ink"></div>
+      <footer class="colophon ink">
+        <span>serv {env!("CARGO_PKG_VERSION")}</span>
+        <span>set in the browser's own types</span>
+      </footer>
+    </main>
+  </body>
+</html>

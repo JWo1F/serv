@@ -4,6 +4,7 @@
 //! page that reads a field the struct does not have is a build failure.
 
 pub mod listing;
+pub mod not_found;
 
 /// One stylesheet, shared by both pages and inlined into each response. A dev
 /// server has to work with the network unplugged, so nothing is fetched.
