@@ -47,7 +47,7 @@ async fn route(req: &Request<Incoming>, config: &Config) -> io::Result<Response<
   }
 
   if is_file(&target).await {
-    return file::send(&target, req.method(), StatusCode::OK).await;
+    return file::send(&target, req, StatusCode::OK).await;
   }
 
   if is_dir(&target).await {
@@ -57,7 +57,7 @@ async fn route(req: &Request<Incoming>, config: &Config) -> io::Result<Response<
     }
     let index = target.join("index.html");
     if is_file(&index).await {
-      return file::send(&index, req.method(), StatusCode::OK).await;
+      return file::send(&index, req, StatusCode::OK).await;
     }
     let index = listing::read(&target, url_path, &config.root).await?;
     return Ok(html(StatusCode::OK, req.method(), index.render()));
@@ -66,7 +66,7 @@ async fn route(req: &Request<Incoming>, config: &Config) -> io::Result<Response<
   if !config.ext {
     let candidate = with_html_suffix(&target);
     if is_file(&candidate).await {
-      return file::send(&candidate, req.method(), StatusCode::OK).await;
+      return file::send(&candidate, req, StatusCode::OK).await;
     }
   }
 
@@ -80,7 +80,7 @@ async fn miss(req: &Request<Incoming>, config: &Config) -> io::Result<Response<B
     && wants_html(req)
     && is_file(spa).await
   {
-    return file::send(spa, req.method(), StatusCode::OK).await;
+    return file::send(spa, req, StatusCode::OK).await;
   }
   not_found(req, config).await
 }
@@ -144,7 +144,7 @@ async fn not_found(req: &Request<Incoming>, config: &Config) -> io::Result<Respo
   if let Some(page) = &config.not_found
     && is_file(page).await
   {
-    return file::send(page, req.method(), StatusCode::NOT_FOUND).await;
+    return file::send(page, req, StatusCode::NOT_FOUND).await;
   }
 
   let host = req
