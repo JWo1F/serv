@@ -3,6 +3,7 @@ use std::ffi::OsString;
 use std::io;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Instant;
 
 use damask::Component;
 use hyper::body::Incoming;
@@ -11,6 +12,7 @@ use hyper::{Method, Request, Response, StatusCode};
 
 use crate::body::{self, Body};
 use crate::config::Config;
+use crate::logging;
 use crate::pages::{listing, not_found::NotFound};
 use crate::{file, path};
 
@@ -18,13 +20,31 @@ pub async fn handle(
   req: Request<Incoming>,
   config: Arc<Config>,
 ) -> Result<Response<Body>, Infallible> {
-  Ok(match route(&req, &config).await {
+  let started = Instant::now();
+
+  let response = match route(&req, &config).await {
     Ok(response) => response,
     Err(err) => {
       log::error!("{} {}: {err}", req.method(), req.uri().path());
       text(StatusCode::INTERNAL_SERVER_ERROR, "internal server error")
     }
-  })
+  };
+
+  let size = response
+    .headers()
+    .get(hyper::header::CONTENT_LENGTH)
+    .and_then(|value| value.to_str().ok())
+    .and_then(|value| value.parse().ok());
+
+  logging::request(
+    req.method().as_str(),
+    req.uri().path(),
+    response.status().as_u16(),
+    size,
+    started.elapsed(),
+  );
+
+  Ok(response)
 }
 
 async fn route(req: &Request<Incoming>, config: &Config) -> io::Result<Response<Body>> {

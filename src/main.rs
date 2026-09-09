@@ -3,6 +3,7 @@ mod cli;
 mod compress;
 mod config;
 mod file;
+mod logging;
 mod pages;
 mod path;
 mod serve;
@@ -32,6 +33,7 @@ fn resolve_addr(host: &str, port: u16) -> std::io::Result<SocketAddr> {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
   let args = Args::parse();
+  logging::init(args.quiet);
 
   let root = args
     .dir
@@ -53,9 +55,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .await
     .map_err(|e| format!("cannot listen on {addr}: {e}"))?;
 
-  println!("serv {}", env!("CARGO_PKG_VERSION"));
+  println!("\x1b[1mserv\x1b[0m {}", env!("CARGO_PKG_VERSION"));
   println!("  root  {}", config.root.display());
   println!("  url   http://{addr}/");
+  if config.spa.is_some() {
+    println!("  mode  single-page app");
+  }
+  println!();
 
   loop {
     let (stream, _) = listener.accept().await?;
