@@ -90,7 +90,7 @@ pub fn print(config: &Config, addr: SocketAddr, quiet: bool) {
     &mut out,
     &paint,
     "encoding",
-    &format!("brotli {} gzip", paint.on(DIM, "·")),
+    &format!("gzip {}", paint.on(DIM, "· text between 1 KiB and 8 MiB")),
   );
   let logs = if quiet {
     paint.on(DIM, "off (--quiet)")

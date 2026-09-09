@@ -20,7 +20,7 @@ $ serv
   index        index.html
   not found    built-in page
   urls         clean · /about serves about.html
-  encoding     brotli · gzip
+  encoding     gzip · text between 1 KiB and 8 MiB
   logs         on
 
   ctrl-c to stop
@@ -51,8 +51,8 @@ macOS on Apple Silicon or Intel, Linux on arm64 or x86_64. The Linux builds are
 statically linked against musl, so they run on any distribution.
 
 ```bash
-tar -xzf serv-0.1.0-aarch64-apple-darwin.tar.gz
-mv serv-0.1.0-aarch64-apple-darwin/serv /usr/local/bin/
+tar -xzf serv-0.1.1-aarch64-apple-darwin.tar.gz
+mv serv-0.1.1-aarch64-apple-darwin/serv /usr/local/bin/
 ```
 
 Or with cargo:
@@ -125,10 +125,12 @@ next reload, the same as any other file.
 `<audio>` scrubbing works. `If-Range` is honoured, so a resumed download that
 finds a changed file gets the whole thing rather than a corrupt splice.
 
-**Compression.** Text responses between 1 KiB and 8 MiB are compressed on the
-fly with brotli, or gzip where brotli is not accepted; `q=0` is honoured as the
-refusal it is. Larger files keep their streaming path and their range support.
-Media, archives and images are sent as they are.
+**Compression.** Text responses between 1 KiB and 8 MiB are gzipped on the fly,
+and `q=0` is honoured as the refusal it is. Larger files keep their streaming
+path and their range support. Media, archives and images are sent as they are.
+Brotli is deliberately absent: it carries a static dictionary and Huffman tables
+worth about a megabyte of binary — roughly half of serv — to save bytes on a
+connection that never leaves the machine.
 
 **Large files stream.** A response is read from disk in chunks as it is written
 to the socket, so serving a 2 GB video costs a buffer, not 2 GB of memory.
