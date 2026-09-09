@@ -1,5 +1,6 @@
 mod body;
 mod cli;
+mod compress;
 mod config;
 mod file;
 mod pages;
