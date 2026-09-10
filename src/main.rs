@@ -1,3 +1,4 @@
+mod banner;
 mod body;
 mod cli;
 mod compress;
@@ -55,13 +56,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .await
     .map_err(|e| format!("cannot listen on {addr}: {e}"))?;
 
-  println!("\x1b[1mserv\x1b[0m {}", env!("CARGO_PKG_VERSION"));
-  println!("  root  {}", config.root.display());
-  println!("  url   http://{addr}/");
-  if config.spa.is_some() {
-    println!("  mode  single-page app");
-  }
-  println!();
+  banner::print(&config, addr, args.quiet);
 
   loop {
     let (stream, _) = listener.accept().await?;
