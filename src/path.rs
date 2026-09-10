@@ -43,3 +43,56 @@ pub fn is_within(root: &Path, path: &Path) -> bool {
     Err(_) => true,
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  fn root() -> PathBuf {
+    PathBuf::from("/srv")
+  }
+
+  #[test]
+  fn maps_a_plain_path() {
+    assert_eq!(
+      resolve(&root(), "/a/b.txt"),
+      Some(PathBuf::from("/srv/a/b.txt"))
+    );
+  }
+
+  #[test]
+  fn ignores_empty_and_dot_segments() {
+    assert_eq!(
+      resolve(&root(), "//a/./b/"),
+      Some(PathBuf::from("/srv/a/b"))
+    );
+  }
+
+  #[test]
+  fn decodes_percent_escapes() {
+    assert_eq!(
+      resolve(&root(), "/my%20file.txt"),
+      Some(PathBuf::from("/srv/my file.txt"))
+    );
+  }
+
+  #[test]
+  fn refuses_to_climb_out_of_the_root() {
+    assert_eq!(resolve(&root(), "/../etc/passwd"), None);
+    assert_eq!(resolve(&root(), "/a/../../etc"), None);
+  }
+
+  #[test]
+  fn climbing_within_the_root_is_fine() {
+    assert_eq!(
+      resolve(&root(), "/a/b/../c"),
+      Some(PathBuf::from("/srv/a/c"))
+    );
+  }
+
+  #[test]
+  fn refuses_separators_smuggled_through_encoding() {
+    assert_eq!(resolve(&root(), "/a%2f..%2f..%2fetc"), None);
+    assert_eq!(resolve(&root(), "/a%5cb"), None);
+  }
+}

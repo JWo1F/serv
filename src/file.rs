@@ -160,7 +160,7 @@ fn etag(len: u64, modified: Option<SystemTime>, encoding: Option<Encoding>) -> S
   format!("\"{len:x}-{stamp:x}{suffix}\"")
 }
 
-fn header<'a>(req: &'a Request<Incoming>, name: hyper::header::HeaderName) -> Option<&'a str> {
+fn header(req: &Request<Incoming>, name: hyper::header::HeaderName) -> Option<&str> {
   req
     .headers()
     .get(name)
@@ -172,6 +172,7 @@ fn matches(value: Option<&str>, etag: &str) -> bool {
   value == "*" || value.split(',').any(|candidate| candidate.trim() == etag)
 }
 
+#[derive(Debug, PartialEq, Eq)]
 enum Range {
   Whole,
   /// Inclusive byte offsets, as HTTP counts them.
@@ -235,4 +236,56 @@ fn needs_charset(mime: &Mime) -> bool {
         | "application/manifest+json"
         | "image/svg+xml"
     )
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn reads_a_closed_range() {
+    assert_eq!(parse_range("bytes=2-5", 10), Range::Partial(2, 5));
+  }
+
+  #[test]
+  fn reads_an_open_range() {
+    assert_eq!(parse_range("bytes=7-", 10), Range::Partial(7, 9));
+  }
+
+  #[test]
+  fn reads_a_suffix_range() {
+    assert_eq!(parse_range("bytes=-3", 10), Range::Partial(7, 9));
+    assert_eq!(parse_range("bytes=-99", 10), Range::Partial(0, 9));
+  }
+
+  #[test]
+  fn clamps_an_end_past_the_file() {
+    assert_eq!(parse_range("bytes=5-99", 10), Range::Partial(5, 9));
+  }
+
+  #[test]
+  fn rejects_a_range_that_starts_past_the_file() {
+    assert_eq!(parse_range("bytes=10-12", 10), Range::Unsatisfiable);
+    assert_eq!(parse_range("bytes=-0", 10), Range::Unsatisfiable);
+  }
+
+  #[test]
+  fn falls_back_to_the_whole_file() {
+    assert_eq!(parse_range("items=0-1", 10), Range::Whole);
+    assert_eq!(parse_range("bytes=0-1,4-5", 10), Range::Whole);
+    assert_eq!(parse_range("bytes=abc-", 10), Range::Whole);
+  }
+
+  #[test]
+  fn tags_text_with_a_charset() {
+    assert_eq!(
+      content_type(Path::new("a.html")),
+      "text/html; charset=utf-8"
+    );
+    assert_eq!(
+      content_type(Path::new("a.svg")),
+      "image/svg+xml; charset=utf-8"
+    );
+    assert_eq!(content_type(Path::new("a.png")), "image/png");
+  }
 }

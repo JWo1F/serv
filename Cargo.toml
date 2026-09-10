@@ -17,7 +17,7 @@ hyper-util = { version = "0.1.20", default-features = false, features = ["tokio"
 log = "0.4.34"
 mime_guess = "2.0.5"
 percent-encoding = "2.3.2"
-tokio = { version = "1.53.1", features = ["rt-multi-thread", "net", "fs", "io-util", "macros", "signal"] }
+tokio = { version = "1.53.1", features = ["rt-multi-thread", "net", "fs", "io-util", "macros"] }
 tokio-util = { version = "0.7.19", features = ["io"] }
 
 [profile.release]

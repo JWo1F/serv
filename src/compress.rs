@@ -104,3 +104,46 @@ pub fn encode(data: &[u8], encoding: Encoding) -> io::Result<Vec<u8>> {
     }
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn prefers_brotli() {
+    assert_eq!(negotiate(Some("gzip, deflate, br")), Some(Encoding::Brotli));
+  }
+
+  #[test]
+  fn falls_back_to_gzip() {
+    assert_eq!(negotiate(Some("gzip, deflate")), Some(Encoding::Gzip));
+  }
+
+  #[test]
+  fn honours_a_refusal() {
+    assert_eq!(negotiate(Some("br;q=0, gzip")), Some(Encoding::Gzip));
+    assert_eq!(negotiate(Some("gzip;q=0")), None);
+  }
+
+  #[test]
+  fn identity_when_nothing_is_offered() {
+    assert_eq!(negotiate(None), None);
+    assert_eq!(negotiate(Some("identity")), None);
+  }
+
+  #[test]
+  fn compresses_only_what_benefits() {
+    assert!(worthwhile("text/css; charset=utf-8"));
+    assert!(worthwhile("application/json"));
+    assert!(worthwhile("image/svg+xml"));
+    assert!(!worthwhile("image/png"));
+    assert!(!worthwhile("video/mp4"));
+  }
+
+  #[test]
+  fn round_trips_through_gzip() {
+    let data = b"hello hello hello hello".repeat(64);
+    let packed = encode(&data, Encoding::Gzip).unwrap();
+    assert!(packed.len() < data.len());
+  }
+}
