@@ -1,4 +1,4 @@
-<img src="assets/logo.svg" alt="serv" width="138" height="72">
+<img src="assets/poster.png" alt="serv" width="732">
 
 A small, fast development server for static sites and single-page apps.
 
