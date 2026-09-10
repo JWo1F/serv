@@ -12,10 +12,16 @@ categories = ["command-line-utilities", "web-programming::http-server"]
 
 [dependencies]
 brotli = "9.0.0"
-clap = { version = "4.6.6", features = ["derive"] }
+clap = { version = "4.6.6", default-features = false, features = [
+  "std",
+  "help",
+  "usage",
+  "error-context",
+  "derive",
+] }
 damask = "0.11.0"
-env_logger = "0.11.11"
-flate2 = "1.1.10"
+env_logger = { version = "0.11.11", default-features = false }
+flate2 = { version = "1.1.10", default-features = false, features = ["rust_backend"] }
 futures-core = "0.3.34"
 http-body-util = "0.1.5"
 httpdate = "1.0.3"

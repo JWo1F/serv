@@ -5,12 +5,12 @@
 //! `about.html`.
 
 use std::fmt::Write as _;
-use std::io::IsTerminal;
 use std::net::SocketAddr;
 use std::path::Path;
 
 use crate::config::Config;
 use crate::pages::human_size;
+use crate::style;
 
 /// serv's madder, warm enough to read on a light terminal and a dark one.
 const MADDER: &str = "38;2;192;74;47";
@@ -196,15 +196,11 @@ struct Paint {
 impl Paint {
   fn detect() -> Self {
     Self {
-      on: std::io::stdout().is_terminal() && std::env::var_os("NO_COLOR").is_none(),
+      on: style::stdout(),
     }
   }
 
   fn on(&self, code: &str, text: &str) -> String {
-    if self.on {
-      format!("\x1b[{code}m{text}\x1b[0m")
-    } else {
-      text.to_string()
-    }
+    style::paint(self.on, code, text)
   }
 }

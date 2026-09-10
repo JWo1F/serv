@@ -8,6 +8,7 @@ mod logging;
 mod pages;
 mod path;
 mod serve;
+mod style;
 
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::sync::Arc;

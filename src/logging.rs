@@ -6,12 +6,11 @@ use std::time::Duration;
 
 use log::LevelFilter;
 
+use crate::style;
+
 /// The target access lines are logged under, so `--quiet` can silence exactly
 /// those and leave warnings and errors alone.
 pub const ACCESS: &str = "serv::access";
-
-const DIM: &str = "\x1b[2m";
-const RESET: &str = "\x1b[0m";
 
 pub fn init(quiet: bool) {
   let mut builder =
@@ -42,20 +41,21 @@ pub fn request(method: &str, path: &str, status: u16, size: Option<u64>, took: D
 
   log::info!(
     target: ACCESS,
-    "{} {method:<4} {path:<38} {DIM}{meta}{RESET}",
+    "{} {method:<4} {path:<38} {}",
     status_badge(status),
+    style::paint(style::stderr(), "2", &meta),
   );
 }
 
 /// Colour by class, the way every access log worth reading does.
 fn status_badge(status: u16) -> String {
   let colour = match status {
-    200..=299 => "\x1b[32m",
-    300..=399 => "\x1b[36m",
-    400..=499 => "\x1b[33m",
-    _ => "\x1b[31m",
+    200..=299 => "32",
+    300..=399 => "36",
+    400..=499 => "33",
+    _ => "31",
   };
-  format!("{colour}{status}{RESET}")
+  style::paint(style::stderr(), colour, &status.to_string())
 }
 
 fn human_size(bytes: u64) -> String {
