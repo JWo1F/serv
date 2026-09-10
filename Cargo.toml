@@ -2,6 +2,13 @@
 name = "serv"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.88"
+description = "A small, fast development server for static sites and single-page apps"
+repository = "https://github.com/JWo1F/serv"
+license = "MIT"
+readme = "README.md"
+keywords = ["http", "server", "static", "development", "spa"]
+categories = ["command-line-utilities", "web-programming::http-server"]
 
 [dependencies]
 brotli = "9.0.0"
