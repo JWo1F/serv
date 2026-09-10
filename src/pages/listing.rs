@@ -3,6 +3,7 @@ use std::path::Path;
 
 use damask::Component;
 
+use crate::pages::icons::Kind;
 use crate::pages::{human_size, human_time};
 
 /// The directory index: a folder presented as the contents page of a book.
@@ -26,8 +27,15 @@ pub struct Entry {
   pub name: String,
   pub href: String,
   pub is_dir: bool,
+  pub kind: Kind,
   pub size: String,
   pub modified: String,
+}
+
+impl Entry {
+  pub fn icon(&self) -> &'static str {
+    self.kind.icon()
+  }
 }
 
 impl Listing {
@@ -58,14 +66,20 @@ pub async fn read(dir: &Path, url_path: &str, root: &Path) -> io::Result<Listing
 
     entries.push(Entry {
       href: format!("{}{}", encode(&name), if is_dir { "/" } else { "" }),
-      name: if is_dir { format!("{name}/") } else { name },
-      is_dir,
+      kind: if is_dir {
+        Kind::Folder
+      } else {
+        Kind::of(&name)
+      },
+      // A folder has no size worth printing, so the column stays empty.
       size: if is_dir {
-        "—".to_string()
+        String::new()
       } else {
         human_size(meta.len())
       },
       modified: meta.modified().map(human_time).unwrap_or_default(),
+      name: if is_dir { format!("{name}/") } else { name },
+      is_dir,
     });
   }
 

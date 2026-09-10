@@ -1,4 +1,4 @@
-# serv
+<img src="assets/logo.svg" alt="serv" width="138" height="72">
 
 A small, fast development server for static sites and single-page apps.
 
@@ -8,9 +8,22 @@ to the browser.
 
 ```console
 $ serv
-serv 0.1.0
-  root  /Users/you/site
-  url   http://127.0.0.1:8010/
+
+  serv▌ 0.1.0
+
+  ╭──────────────────────────╮
+  │  http://127.0.0.1:8010/  │
+  ╰──────────────────────────╯
+
+  root         ~/site
+  contents     3 folders · 8 files · 412 kB
+  index        index.html
+  not found    built-in page
+  urls         clean · /about serves about.html
+  encoding     brotli · gzip
+  logs         on
+
+  ctrl-c to stop
 
 200 GET  /                                      2.4 kB  0.6 ms
 200 GET  /app.css                               8.1 kB  0.3 ms
@@ -67,9 +80,9 @@ serves `docs/index.html`. Pass `-e` to turn all of that off and serve paths
 exactly as written.
 
 **Directories.** A folder with an `index.html` serves it. A folder without one
-gets a browsable index, laid out like the contents page of a book. A request for
-a folder without a trailing slash is redirected to one, so relative links inside
-the page resolve.
+gets a browsable index — every entry with its type, size and date, and folders
+first. A request for a folder without a trailing slash is redirected to one, so
+relative links inside the page resolve.
 
 **Single-page apps.** With `-s`, anything that does not exist on disk answers
 with the app shell — but only for navigations. A request for a missing script or

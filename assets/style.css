@@ -8,7 +8,7 @@
   --ink: #1c1916;
   --ink-soft: #6a6053;
   --ink-faint: #a2988a;
-  --vermilion: #cc3d20;
+  --vermilion: #a3372a;
   --rule: rgba(28, 25, 22, 0.16);
   --rule-strong: rgba(28, 25, 22, 0.42);
 
@@ -28,7 +28,7 @@
     --ink: #ece4d4;
     --ink-soft: #9a9081;
     --ink-faint: #5f584c;
-    --vermilion: #ff5f3c;
+    --vermilion: #d4553f;
     --rule: rgba(236, 228, 212, 0.16);
     --rule-strong: rgba(236, 228, 212, 0.38);
   }
@@ -213,72 +213,104 @@ body::before {
 
 .index {
   list-style: none;
-  margin: 1.4rem 0 0;
+  margin: 1.5rem 0 0;
   padding: 0;
 }
 
-.index li { border-bottom: 1px solid var(--rule); }
+.index li + li { border-top: 1px solid var(--rule); }
 
+/* name … size … modified … go */
 .entry {
-  display: flex;
-  align-items: baseline;
-  gap: 0.75rem;
-  padding: 0.55rem 0.4rem 0.5rem;
+  display: grid;
+  grid-template-columns: 1.2rem minmax(0, 1fr) auto 1.15rem;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 0.6rem 0.55rem;
   text-decoration: none;
   color: inherit;
-}
-
-.entry .caret {
-  flex: none;
-  width: 1.1rem;
-  font-family: var(--mono);
-  font-size: 0.75rem;
-  color: var(--ink-faint);
-  transition: color 0.12s, transform 0.12s;
+  transition: background 0.12s;
 }
 
 .entry .name {
   font-family: var(--mono);
-  font-size: 0.92rem;
+  font-size: 0.94rem;
+  color: var(--ink-soft);
   overflow-wrap: anywhere;
 }
 
-.entry .leader {
-  flex: 1 1 auto;
-  min-width: 1.5rem;
-  height: 0.55em;
-  border-bottom: 1px dotted var(--rule-strong);
-  opacity: 0.6;
+/* a folder carries the weight; a file sits back */
+.entry--dir .name {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.entry--up .name {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 1rem;
+  color: var(--ink-soft);
 }
 
 .entry .meta {
-  flex: none;
+  display: flex;
+  gap: 1.4rem;
   font-family: var(--mono);
-  font-size: 0.72rem;
+  font-size: 0.71rem;
   color: var(--ink-faint);
   font-variant-numeric: tabular-nums;
 }
-.entry .meta .size { display: inline-block; min-width: 4.5rem; text-align: right; }
-.entry .meta .when { display: inline-block; min-width: 7.5rem; text-align: right; }
+
+.entry .size { min-width: 4.2rem; text-align: right; }
+.entry .when { min-width: 7.4rem; text-align: right; }
+
+.icon {
+  width: 1.2rem;
+  height: 1.2rem;
+  color: var(--ink-faint);
+  transition: color 0.15s;
+}
+
+.entry--dir .icon,
+.entry--up .icon { color: var(--ink-soft); }
+
+.chev {
+  width: 1.15rem;
+  height: 1.15rem;
+  color: var(--ink-faint);
+  opacity: 0.55;
+  transition: transform 0.15s, color 0.15s, opacity 0.15s;
+}
+
+.entry--dir .chev { opacity: 0.85; }
 
 .entry:hover { background: var(--paper-sunk); }
-.entry:hover .caret { color: var(--vermilion); transform: translateX(2px); }
-.entry:hover .name { color: var(--vermilion); }
-
-.entry--dir .name { font-weight: 600; }
-.entry--up .name { font-style: italic; font-family: var(--serif); color: var(--ink-soft); }
+.entry:hover .name,
+.entry:hover .icon { color: var(--vermilion); }
+.entry:hover .chev { color: var(--vermilion); opacity: 1; transform: translateX(3px); }
 
 .colophon {
   display: flex;
   justify-content: space-between;
-  gap: 1rem;
+  align-items: baseline;
+  gap: 1rem 2rem;
   flex-wrap: wrap;
-  margin-top: 1.6rem;
+  margin-top: 1.4rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--rule);
   font-family: var(--mono);
-  font-size: 0.66rem;
+  font-size: 0.68rem;
+  color: var(--ink-faint);
+}
+
+/* the label shouts; the path is a path and stays one */
+.colophon .tag {
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--ink-faint);
+}
+
+.colophon .where {
+  overflow-wrap: anywhere;
+  text-align: right;
 }
 
 .empty {
@@ -289,8 +321,9 @@ body::before {
 }
 
 @media (max-width: 34rem) {
-  .entry .meta .when { display: none; }
-  .entry .meta .size { min-width: 3.5rem; }
+  .entry { gap: 0.7rem; }
+  .entry .when { display: none; }
+  .entry .size { min-width: 3.4rem; }
 }
 
 /* ── ink laid down, one line at a time ─────────────────────── */

@@ -3,6 +3,7 @@
   <head>
     <meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <link rel="icon" href={crate::pages::FAVICON}/>
     <title>Index of {self.crumbs.last().map(|c| c.href.as_str()).unwrap_or("/")}</title>
     <style>{@html self.style()}</style>
   </head>
@@ -23,23 +24,23 @@
         {#if let Some(parent) = &self.parent}
           <li>
             <a class="entry entry--up" href={parent.as_str()}>
-              <span class="caret">↑</span>
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{@html crate::pages::icons::FOLDER_UP}</svg>
               <span class="name">up one level</span>
-              <span class="leader"></span>
               <span class="meta"></span>
+              <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{@html crate::pages::icons::CHEVRON}</svg>
             </a>
           </li>
         {/if}
         {#for entry in &self.entries}
           <li>
             <a class={@tokens("entry", "entry--dir": entry.is_dir)} href={entry.href.as_str()}>
-              <span class="caret">{#if entry.is_dir}▸{:else}·{/if}</span>
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{@html entry.icon()}</svg>
               <span class="name">{entry.name}</span>
-              <span class="leader"></span>
               <span class="meta">
                 <span class="size">{entry.size}</span>
                 <span class="when">{entry.modified}</span>
               </span>
+              <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{@html crate::pages::icons::CHEVRON}</svg>
             </a>
           </li>
         {/for}
@@ -50,8 +51,8 @@
       {/if}
 
       <footer class="colophon ink">
-        <span>serv {env!("CARGO_PKG_VERSION")}</span>
-        <span>{self.root}</span>
+        <span class="tag">serv {env!("CARGO_PKG_VERSION")}</span>
+        <span class="where">{self.root}</span>
       </footer>
     </main>
   </body>

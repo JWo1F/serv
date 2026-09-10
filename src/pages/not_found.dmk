@@ -3,6 +3,7 @@
   <head>
     <meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <link rel="icon" href={crate::pages::FAVICON}/>
     <title>404 — not on file</title>
     <style>{@html self.style()}</style>
   </head>
@@ -32,10 +33,9 @@
         </div>
       </section>
 
-      <div class="rule rule--hair ink"></div>
       <footer class="colophon ink">
-        <span>serv {env!("CARGO_PKG_VERSION")}</span>
-        <span>set in the browser's own types</span>
+        <span class="tag">serv {env!("CARGO_PKG_VERSION")}</span>
+        <span class="where">set in the browser's own types</span>
       </footer>
     </main>
   </body>
