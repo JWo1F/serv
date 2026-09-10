@@ -32,6 +32,17 @@ $ serv
 
 ## Install
 
+Grab a binary from the [latest release](https://github.com/JWo1F/serv/releases/latest) —
+macOS on Apple Silicon or Intel, Linux on arm64 or x86_64. The Linux builds are
+statically linked against musl, so they run on any distribution.
+
+```bash
+tar -xzf serv-0.1.0-aarch64-apple-darwin.tar.gz
+mv serv-0.1.0-aarch64-apple-darwin/serv /usr/local/bin/
+```
+
+Or with cargo:
+
 ```bash
 cargo install --git https://github.com/JWo1F/serv
 ```
