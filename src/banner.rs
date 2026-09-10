@@ -148,7 +148,7 @@ fn tilde(path: &Path) -> String {
     Some(home) if !home.is_empty() => {
       let home = home.to_string_lossy().into_owned();
       match shown.strip_prefix(&home) {
-        Some(rest) if rest.is_empty() => "~".to_string(),
+        Some("") => "~".to_string(),
         Some(rest) if rest.starts_with('/') => format!("~{rest}"),
         _ => shown,
       }
