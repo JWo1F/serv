@@ -32,7 +32,21 @@ $ serv
 
 ## Install
 
-Grab a binary from the [latest release](https://github.com/JWo1F/serv/releases/latest) —
+With Homebrew, on macOS or Linux:
+
+```bash
+brew install jwo1f/tap/serv
+```
+
+That pours a prebuilt binary — no Rust toolchain, nothing to compile. To follow
+releases with `brew upgrade`, tap it first:
+
+```bash
+brew tap jwo1f/tap
+brew install serv
+```
+
+Or grab a binary from the [latest release](https://github.com/JWo1F/serv/releases/latest) —
 macOS on Apple Silicon or Intel, Linux on arm64 or x86_64. The Linux builds are
 statically linked against musl, so they run on any distribution.
 
