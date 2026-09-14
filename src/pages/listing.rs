@@ -133,3 +133,248 @@ fn encode(name: &str) -> String {
 
   utf8_percent_encode(name, SEGMENT).to_string()
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use std::fs;
+  use tempfile::TempDir;
+
+  /// A root with the given entries; a name ending in `/` becomes a directory.
+  fn tree(names: &[&str]) -> TempDir {
+    let dir = tempfile::tempdir().unwrap();
+    for name in names {
+      match name.strip_suffix('/') {
+        Some(folder) => fs::create_dir(dir.path().join(folder)).unwrap(),
+        None => fs::write(dir.path().join(name), "").unwrap(),
+      }
+    }
+    dir
+  }
+
+  async fn listing(dir: &TempDir, url_path: &str) -> Listing {
+    read(dir.path(), url_path, dir.path()).await.unwrap()
+  }
+
+  fn names(listing: &Listing) -> Vec<&str> {
+    listing.entries.iter().map(|e| e.name.as_str()).collect()
+  }
+
+  #[tokio::test]
+  async fn puts_folders_first_then_sorts_alphabetically() {
+    let dir = tree(&["b.txt", "a.txt", "zeta/", "alpha/"]);
+    let page = listing(&dir, "/").await;
+
+    assert_eq!(names(&page), ["alpha/", "zeta/", "a.txt", "b.txt"]);
+  }
+
+  #[tokio::test]
+  async fn sorts_by_byte_order_so_capitals_come_first() {
+    // Plain `str` ordering, which puts `README` above `assets` the way `ls`
+    // does in the C locale.
+    let dir = tree(&["alpha.txt", "Beta.txt"]);
+    let page = listing(&dir, "/").await;
+
+    assert_eq!(names(&page), ["Beta.txt", "alpha.txt"]);
+  }
+
+  #[tokio::test]
+  async fn marks_folders_with_a_trailing_slash_and_no_size() {
+    let dir = tree(&["docs/", "a.txt"]);
+    let page = listing(&dir, "/").await;
+
+    let docs = &page.entries[0];
+    assert!(docs.is_dir);
+    assert_eq!(docs.name, "docs/");
+    assert_eq!(docs.href, "docs/");
+    assert_eq!(docs.size, "");
+    assert_eq!(docs.kind, Kind::Folder);
+
+    let file = &page.entries[1];
+    assert!(!file.is_dir);
+    assert_eq!(file.href, "a.txt");
+    assert_eq!(file.size, "0 B");
+    assert!(!file.modified.is_empty());
+  }
+
+  #[tokio::test]
+  async fn reports_a_files_size() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(dir.path().join("big.bin"), vec![0u8; 2048]).unwrap();
+    let page = listing(&dir, "/").await;
+
+    assert_eq!(page.entries[0].size, "2.0 kB");
+  }
+
+  #[tokio::test]
+  async fn picks_an_icon_per_entry() {
+    let dir = tree(&["page.html", "app.css", "main.js", "notes.txt", "sub/"]);
+    let page = listing(&dir, "/").await;
+    let kinds: Vec<Kind> = page.entries.iter().map(|e| e.kind).collect();
+
+    assert_eq!(
+      kinds,
+      [Kind::Folder, Kind::Css, Kind::Js, Kind::File, Kind::Html]
+    );
+  }
+
+  #[tokio::test]
+  async fn an_empty_directory_lists_nothing() {
+    let dir = tree(&[]);
+    let page = listing(&dir, "/").await;
+
+    assert!(page.entries.is_empty());
+    assert_eq!(page.tally(), "0 folders · 0 files");
+  }
+
+  #[tokio::test]
+  async fn counts_folders_and_files_separately() {
+    let dir = tree(&["a/", "b/", "c.txt"]);
+    let page = listing(&dir, "/").await;
+
+    assert_eq!(page.tally(), "2 folders · 1 files");
+  }
+
+  #[tokio::test]
+  async fn there_is_nowhere_to_go_up_to_from_the_root() {
+    let dir = tree(&[]);
+    assert_eq!(listing(&dir, "/").await.parent, None);
+    assert_eq!(
+      listing(&dir, "/docs/").await.parent,
+      Some("../".to_string())
+    );
+  }
+
+  #[tokio::test]
+  async fn names_the_served_directory_for_the_colophon() {
+    let dir = tree(&[]);
+    let page = listing(&dir, "/").await;
+
+    assert_eq!(page.root, dir.path().display().to_string());
+  }
+
+  #[tokio::test]
+  async fn renders_its_entries_and_its_stylesheet() {
+    let dir = tree(&["readme.md", "docs/"]);
+    let page = listing(&dir, "/").await;
+    let html = page.render();
+
+    assert!(html.contains("readme.md"));
+    assert!(html.contains("docs/"));
+    // The stylesheet is inlined, not linked, so the page works offline.
+    assert!(html.contains(crate::pages::STYLE));
+    assert!(!page.style().is_empty());
+  }
+
+  #[cfg(unix)]
+  #[tokio::test]
+  async fn a_dangling_symlink_is_listed_as_an_ordinary_entry() {
+    // The metadata behind a `DirEntry` is read without following the link, so a
+    // dangling one still has metadata and is listed. The `continue` guarding
+    // that read is for the rarer failures — a directory that became unreadable
+    // between the scan and the stat.
+    let dir = tree(&["real.txt"]);
+    std::os::unix::fs::symlink(dir.path().join("gone.txt"), dir.path().join("broken")).unwrap();
+    let page = listing(&dir, "/").await;
+
+    assert_eq!(names(&page), ["broken", "real.txt"]);
+  }
+
+  #[cfg(unix)]
+  #[tokio::test]
+  async fn a_symlink_to_a_directory_is_listed_as_a_file() {
+    // Same cause: the link itself is stat-ed, so it is not marked as a folder.
+    // Following it still works — the link has no trailing slash, so the request
+    // is redirected to one and served from there.
+    let dir = tree(&["docs/"]);
+    std::os::unix::fs::symlink(dir.path().join("docs"), dir.path().join("guide")).unwrap();
+    let page = listing(&dir, "/").await;
+
+    assert_eq!(names(&page), ["docs/", "guide"]);
+    assert!(!page.entries[1].is_dir);
+  }
+
+  #[tokio::test]
+  async fn reading_a_directory_that_is_not_there_is_an_error() {
+    let dir = tempfile::tempdir().unwrap();
+    let missing = dir.path().join("nope");
+
+    assert!(read(&missing, "/nope/", dir.path()).await.is_err());
+  }
+
+  #[tokio::test]
+  async fn percent_encodes_names_that_would_break_a_url() {
+    let dir = tree(&["my file.txt", "a#b.txt", "q?.txt", "100%.txt"]);
+    let page = listing(&dir, "/").await;
+    let hrefs: Vec<&str> = page.entries.iter().map(|e| e.href.as_str()).collect();
+
+    assert!(hrefs.contains(&"my%20file.txt"));
+    assert!(hrefs.contains(&"a%23b.txt"));
+    assert!(hrefs.contains(&"q%3F.txt"));
+    assert!(hrefs.contains(&"100%25.txt"));
+    // The label keeps the name as it is on disk; only the link is encoded.
+    assert!(names(&page).contains(&"my file.txt"));
+  }
+
+  #[test]
+  fn encodes_a_segment_without_touching_what_is_already_safe() {
+    assert_eq!(encode("plain.txt"), "plain.txt");
+    assert_eq!(encode("a-b_c.d~e"), "a-b_c.d~e");
+    assert_eq!(encode("my file.txt"), "my%20file.txt");
+    assert_eq!(encode("a#b"), "a%23b");
+    assert_eq!(encode("a?b"), "a%3Fb");
+    assert_eq!(encode("50%"), "50%25");
+    assert_eq!(encode("a/b"), "a%2Fb");
+    assert_eq!(encode("a\\b"), "a%5Cb");
+    assert_eq!(encode("<i>"), "%3Ci%3E");
+    assert_eq!(encode("a\"b"), "a%22b");
+    assert_eq!(encode("a`b^c{d}e|f"), "a%60b%5Ec%7Bd%7De%7Cf");
+  }
+
+  #[test]
+  fn encodes_unicode_as_utf8_bytes() {
+    assert_eq!(
+      encode("привет.txt"),
+      "%D0%BF%D1%80%D0%B8%D0%B2%D0%B5%D1%82.txt"
+    );
+    assert_eq!(encode("café"), "caf%C3%A9");
+    assert_eq!(encode("🙂"), "%F0%9F%99%82");
+  }
+
+  #[test]
+  fn the_root_gets_a_single_crumb() {
+    let trail = crumbs("/");
+    assert_eq!(trail.len(), 1);
+    assert_eq!(trail[0].label, "/");
+    assert_eq!(trail[0].href, "/");
+  }
+
+  #[test]
+  fn a_nested_path_gets_a_crumb_per_segment() {
+    let built = crumbs("/a/b/c/");
+    let trail: Vec<(&str, &str)> = built
+      .iter()
+      .map(|c| (c.label.as_str(), c.href.as_str()))
+      .collect();
+
+    assert_eq!(
+      trail,
+      [
+        ("/", "/"),
+        ("a/", "/a/"),
+        ("b/", "/a/b/"),
+        ("c/", "/a/b/c/"),
+      ]
+    );
+  }
+
+  #[test]
+  fn crumb_links_are_absolute_and_end_in_a_slash() {
+    // Every crumb points at a directory, so each href must be one a browser can
+    // follow from anywhere in the tree.
+    for crumb in crumbs("/docs/guide/") {
+      assert!(crumb.href.starts_with('/'));
+      assert!(crumb.href.ends_with('/'));
+    }
+  }
+}

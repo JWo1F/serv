@@ -63,8 +63,37 @@ mod tests {
     assert_eq!(Kind::of("page.HTM"), Kind::Html);
     assert_eq!(Kind::of("app.css"), Kind::Css);
     assert_eq!(Kind::of("bundle.mjs"), Kind::Js);
+    assert_eq!(Kind::of("legacy.cjs"), Kind::Js);
+    assert_eq!(Kind::of("main.js"), Kind::Js);
     assert_eq!(Kind::of("notes.txt"), Kind::File);
     assert_eq!(Kind::of("LICENSE"), Kind::File);
     assert_eq!(Kind::of(".gitignore"), Kind::File);
+  }
+
+  #[test]
+  fn reads_the_last_extension_of_a_compound_name() {
+    assert_eq!(Kind::of("app.min.css"), Kind::Css);
+    assert_eq!(Kind::of("site.tar.gz"), Kind::File);
+  }
+
+  #[test]
+  fn an_empty_extension_is_no_extension() {
+    assert_eq!(Kind::of("trailing."), Kind::File);
+    assert_eq!(Kind::of(""), Kind::File);
+  }
+
+  #[test]
+  fn matches_an_extension_regardless_of_case() {
+    assert_eq!(Kind::of("APP.CSS"), Kind::Css);
+    assert_eq!(Kind::of("Main.Js"), Kind::Js);
+  }
+
+  #[test]
+  fn every_kind_draws_something() {
+    for kind in [Kind::Folder, Kind::Html, Kind::Css, Kind::Js, Kind::File] {
+      assert!(kind.icon().starts_with("<path"));
+    }
+    assert!(FOLDER_UP.starts_with("<path"));
+    assert!(CHEVRON.starts_with("<path"));
   }
 }
