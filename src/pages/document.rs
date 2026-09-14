@@ -24,7 +24,7 @@ impl Document {
     Self {
       title: rendered.title,
       body: rendered.body,
-      crumbs: crumbs(url_path),
+      crumbs: crumbs(url_path, root),
       root: root.display().to_string(),
     }
   }

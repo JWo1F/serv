@@ -86,16 +86,24 @@ pub async fn read(dir: &Path, url_path: &str, root: &Path) -> io::Result<Listing
   entries.sort_by(|a, b| b.is_dir.cmp(&a.is_dir).then_with(|| a.name.cmp(&b.name)));
 
   Ok(Listing {
-    crumbs: crumbs(url_path),
+    crumbs: crumbs(url_path, root),
     parent: (url_path != "/").then(|| "../".to_string()),
     entries,
     root: root.display().to_string(),
   })
 }
 
-pub fn crumbs(url_path: &str) -> Vec<Crumb> {
+/// The trail from the served folder down to `url_path`. The first crumb wears
+/// the folder's own name rather than a bare slash, so the trail says which tree
+/// you are in — a root with no name of its own keeps the slash.
+pub fn crumbs(url_path: &str, root: &Path) -> Vec<Crumb> {
+  let name = root
+    .file_name()
+    .map(|name| format!("{}/", name.to_string_lossy()))
+    .unwrap_or_else(|| "/".to_string());
+
   let mut crumbs = vec![Crumb {
-    label: "/".to_string(),
+    label: name,
     href: "/".to_string(),
   }];
   let mut href = String::from("/");
@@ -342,16 +350,22 @@ mod tests {
   }
 
   #[test]
-  fn the_root_gets_a_single_crumb() {
-    let trail = crumbs("/");
+  fn the_root_gets_a_single_crumb_named_after_the_folder() {
+    let trail = crumbs("/", Path::new("/home/alex/site"));
     assert_eq!(trail.len(), 1);
-    assert_eq!(trail[0].label, "/");
+    assert_eq!(trail[0].label, "site/");
     assert_eq!(trail[0].href, "/");
   }
 
   #[test]
+  fn a_root_with_no_name_of_its_own_stays_a_slash() {
+    // `serv /` has no folder name to show; the slash is the only honest label.
+    assert_eq!(crumbs("/", Path::new("/"))[0].label, "/");
+  }
+
+  #[test]
   fn a_nested_path_gets_a_crumb_per_segment() {
-    let built = crumbs("/a/b/c/");
+    let built = crumbs("/a/b/c/", Path::new("/home/alex/site"));
     let trail: Vec<(&str, &str)> = built
       .iter()
       .map(|c| (c.label.as_str(), c.href.as_str()))
@@ -360,7 +374,7 @@ mod tests {
     assert_eq!(
       trail,
       [
-        ("/", "/"),
+        ("site/", "/"),
         ("a/", "/a/"),
         ("b/", "/a/b/"),
         ("c/", "/a/b/c/"),
@@ -372,7 +386,7 @@ mod tests {
   fn crumb_links_are_absolute_and_end_in_a_slash() {
     // Every crumb points at a directory, so each href must be one a browser can
     // follow from anywhere in the tree.
-    for crumb in crumbs("/docs/guide/") {
+    for crumb in crumbs("/docs/guide/", Path::new("/home/alex/site")) {
       assert!(crumb.href.starts_with('/'));
       assert!(crumb.href.ends_with('/'));
     }
