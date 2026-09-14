@@ -1,6 +1,6 @@
 <img src="assets/poster.png" alt="serv" width="732">
 
-A small, fast development server for static sites and single-page apps.
+A small, fast development server for static sites, single-page apps and markdown.
 
 Point it at a folder and open the URL. No config file, no project layout to
 conform to, no network access — one binary that reads your files and hands them

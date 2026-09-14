@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use clap::{ArgAction, Parser};
 
-/// A small, fast development server for static sites and single-page apps.
+/// A small, fast development server for static sites, single-page apps and markdown.
 #[derive(Debug, Parser)]
 #[command(
   name = "serv",
