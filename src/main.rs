@@ -9,6 +9,8 @@ mod pages;
 mod path;
 mod serve;
 mod style;
+#[cfg(test)]
+mod testkit;
 
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::sync::Arc;
