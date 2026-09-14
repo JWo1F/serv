@@ -495,6 +495,24 @@ body::before {
 }
 
 /* A wide table scrolls inside the sheet rather than stretching it. */
+/* A diagram is a plate, not a listing: no code chrome, and centred on the page.
+   Until mermaid has replaced it the block still shows its own source, which is
+   what a reader gets when the CDN is unreachable. */
+.prose pre.mermaid {
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 1.7rem 0;
+  text-align: center;
+  line-height: inherit;
+  color: var(--ink-faint);
+}
+
+.prose pre.mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
 .prose table {
   display: block;
   width: max-content;
