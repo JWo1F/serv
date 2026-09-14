@@ -343,3 +343,209 @@ body::before {
   from { opacity: 0; transform: translateY(0.4rem); }
   to { opacity: 1; transform: none; }
 }
+
+/* ── the document ──────────────────────────────────────────── */
+
+/* Three more inks than the sheet otherwise uses: a printer setting code would
+   reach for a second and third colour, and not a fourth. */
+:root {
+  --ink-code-string: #5d6b3a;
+  --ink-code-number: #3c5a77;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink-code-string: #9aa86b;
+    --ink-code-number: #8fb0cc;
+  }
+}
+
+.prose {
+  margin: 1.6rem 0 0;
+  font-size: 1.02rem;
+  line-height: 1.66;
+  overflow-wrap: break-word;
+}
+
+.prose > :first-child { margin-top: 0; }
+.prose > :last-child { margin-bottom: 0; }
+
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4,
+.prose h5,
+.prose h6 {
+  margin: 2.2rem 0 0.7rem;
+  font-weight: 500;
+  line-height: 1.22;
+  letter-spacing: -0.015em;
+}
+
+.prose h1 { font-size: clamp(1.7rem, 4vw, 2.4rem); font-weight: 400; }
+.prose h2 { font-size: 1.5rem; }
+.prose h3 { font-size: 1.22rem; }
+.prose h4 { font-size: 1.05rem; }
+.prose h5,
+.prose h6 {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+/* The first heading is the page's own title and needs no space above it. */
+.prose > h1:first-child,
+.prose > h2:first-child { margin-top: 0.4rem; }
+
+/* A rule under the top two levels, the way a chapter opens. */
+.prose h1,
+.prose h2 {
+  padding-bottom: 0.32rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+/* The anchor is there whether or not it is advertised; hovering advertises it. */
+.prose h1[id],
+.prose h2[id],
+.prose h3[id],
+.prose h4[id] { position: relative; }
+
+.prose h1[id]:hover::before,
+.prose h2[id]:hover::before,
+.prose h3[id]:hover::before,
+.prose h4[id]:hover::before {
+  content: "§";
+  position: absolute;
+  left: -1.1rem;
+  color: var(--ink-faint);
+  font-size: 0.8em;
+  line-height: inherit;
+}
+
+.prose p { margin: 0 0 1.1rem; }
+
+.prose a {
+  color: var(--ink);
+  text-decoration: none;
+  border-bottom: 1px solid var(--rule-strong);
+  transition: color 0.15s, border-color 0.15s;
+}
+.prose a:hover { color: var(--vermilion); border-color: var(--vermilion); }
+
+.prose strong { font-weight: 600; }
+.prose em { font-style: italic; }
+.prose del { color: var(--ink-faint); }
+.prose mark { background: var(--paper-sunk); color: inherit; }
+
+.prose ul,
+.prose ol { margin: 0 0 1.1rem; padding-left: 1.4rem; }
+.prose li { margin: 0.3rem 0; }
+.prose li::marker { color: var(--ink-faint); }
+
+/* A checked box is done with, and reads that way. */
+.prose ul:has(> li > input[type="checkbox"]) { list-style: none; padding-left: 0.2rem; }
+.prose li > input[type="checkbox"] {
+  margin-right: 0.45rem;
+  accent-color: var(--vermilion);
+}
+
+.prose blockquote {
+  margin: 1.3rem 0;
+  padding: 0.1rem 0 0.1rem 1.1rem;
+  border-left: 2px solid var(--rule-strong);
+  color: var(--ink-soft);
+  font-style: italic;
+}
+.prose blockquote p:last-child { margin-bottom: 0; }
+
+.prose hr {
+  margin: 2rem 0;
+  border: 0;
+  border-top: 1px solid var(--rule);
+}
+
+.prose img { max-width: 100%; height: auto; }
+
+.prose code {
+  font-family: var(--mono);
+  font-size: 0.86em;
+  background: var(--paper-sunk);
+  padding: 0.12em 0.34em;
+  border-radius: 2px;
+}
+
+.prose pre {
+  margin: 1.3rem 0;
+  padding: 0.9rem 1rem;
+  background: var(--paper-sunk);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  overflow-x: auto;
+  font-size: 0.83rem;
+  line-height: 1.55;
+}
+
+/* Inside a block the background is already set; the inline chip would double it. */
+.prose pre code {
+  background: none;
+  padding: 0;
+  font-size: inherit;
+}
+
+/* A wide table scrolls inside the sheet rather than stretching it. */
+.prose table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 1.3rem 0;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+.prose th,
+.prose td {
+  padding: 0.45rem 0.7rem;
+  text-align: left;
+  border-bottom: 1px solid var(--rule);
+}
+.prose th {
+  font-family: var(--mono);
+  font-size: 0.74rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  border-bottom-color: var(--rule-strong);
+}
+.prose tbody tr:hover { background: var(--paper-sunk); }
+
+.prose .footnote-definition {
+  margin: 0.5rem 0;
+  font-size: 0.88rem;
+  color: var(--ink-soft);
+}
+.prose .footnote-definition-label {
+  font-family: var(--mono);
+  color: var(--vermilion);
+}
+.prose sup a { border: 0; color: var(--vermilion); }
+
+/* ── code, set in four inks ────────────────────────────────── */
+
+.hl .hl-comment { color: var(--ink-faint); font-style: italic; }
+.hl .hl-string { color: var(--ink-code-string); }
+.hl .hl-constant { color: var(--ink-code-number); }
+.hl .hl-keyword,
+.hl .hl-storage { color: var(--vermilion); }
+.hl .hl-entity,
+.hl .hl-support { color: var(--ink); }
+.hl .hl-punctuation,
+.hl .hl-meta { color: var(--ink-soft); }
+.hl .hl-variable { color: inherit; }
+.hl .hl-invalid { color: var(--vermilion); text-decoration: underline wavy; }
+
+@media (max-width: 34rem) {
+  .prose { font-size: 0.98rem; }
+  .prose pre { padding: 0.75rem 0.8rem; }
+}
