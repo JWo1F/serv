@@ -192,7 +192,7 @@ async fn document(
     .file_name()
     .map(|n| n.to_string_lossy().into_owned())
     .unwrap_or_default();
-  let page = Document::new(&source, &name, url_path, &config.root);
+  let page = Document::new(&source, &name, url_path, &config.root, !config.ext);
 
   Ok(html(StatusCode::OK, req.method(), page.render()))
 }
@@ -1043,6 +1043,33 @@ mod markdown_tests {
     let site = Site::new().markdown().ext().file("docs/README.md", DOC);
 
     assert!(site.get("/docs/").await.text().contains("some prose"));
+  }
+
+  #[tokio::test]
+  async fn a_link_between_documents_points_at_the_clean_url() {
+    let reply = site()
+      .file("about.md", "[guide](guide.md)")
+      .file("guide.md", DOC)
+      .get("/about")
+      .await;
+
+    assert!(reply.text().contains(r#"href="guide""#), "{}", reply.text());
+  }
+
+  #[tokio::test]
+  async fn ext_mode_leaves_links_literal() {
+    let site = Site::new()
+      .markdown()
+      .ext()
+      .file("about.md", "[guide](guide.md)")
+      .file("guide.md", DOC);
+    let reply = site.get("/about.md").await;
+
+    assert!(
+      reply.text().contains(r#"href="guide.md""#),
+      "{}",
+      reply.text()
+    );
   }
 
   #[tokio::test]

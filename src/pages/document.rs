@@ -19,8 +19,8 @@ pub struct Document {
 }
 
 impl Document {
-  pub fn new(source: &str, name: &str, url_path: &str, root: &Path) -> Self {
-    let rendered = markdown::render(source, name);
+  pub fn new(source: &str, name: &str, url_path: &str, root: &Path, clean_urls: bool) -> Self {
+    let rendered = markdown::render(source, name, clean_urls);
     Self {
       title: rendered.title,
       body: rendered.body,
@@ -39,7 +39,7 @@ mod tests {
   use super::*;
 
   fn page(source: &str, url_path: &str) -> String {
-    Document::new(source, "doc.md", url_path, Path::new("/site")).render()
+    Document::new(source, "doc.md", url_path, Path::new("/site"), true).render()
   }
 
   #[test]

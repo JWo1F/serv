@@ -26,10 +26,13 @@ fn options() -> Options {
     | Options::ENABLE_PLUSES_DELIMITED_METADATA_BLOCKS
 }
 
-pub fn render(source: &str, name: &str) -> Rendered {
+/// `clean_urls` follows `--ext` inverted: with literal URLs there is no
+/// extension being stripped, so there is nothing for a link to point at instead.
+pub fn render(source: &str, name: &str, clean_urls: bool) -> Rendered {
   let mut events: Vec<Event<'_>> = Parser::new_ext(source, options()).collect();
   drop_metadata(&mut events);
   anchor_headings(&mut events);
+  rewrite_links(&mut events, clean_urls);
   #[cfg(feature = "highlight")]
   highlight_code(&mut events);
 
@@ -91,6 +94,110 @@ fn highlight_code(events: &mut Vec<Event<'_>>) {
   }
 
   *events = out;
+}
+
+/// Point links at the pages serv actually serves. A link to `guide.md` becomes
+/// `guide`, which is where the redirect would have sent the reader anyway — one
+/// hop saved, and the address bar right the first time. A link off the machine
+/// opens in its own tab instead of throwing the document away.
+fn rewrite_links(events: &mut Vec<Event<'_>>, clean_urls: bool) {
+  use pulldown_cmark::CowStr;
+
+  let mut out: Vec<Event<'_>> = Vec::with_capacity(events.len());
+  let mut opened_by_hand = false;
+
+  for event in std::mem::take(events) {
+    match event {
+      Event::Start(Tag::Link {
+        link_type,
+        dest_url,
+        title,
+        id,
+      }) => {
+        if leaves_the_machine(&dest_url) {
+          // pulldown has no room for an arbitrary attribute on a link, so the
+          // tag is written out by hand and closed by hand below.
+          let mut tag = format!("<a href=\"{}\"", escape(&dest_url));
+          if !title.is_empty() {
+            tag.push_str(&format!(" title=\"{}\"", escape(&title)));
+          }
+          tag.push_str(" target=\"_blank\" rel=\"noopener\">");
+          out.push(Event::Html(CowStr::from(tag)));
+          opened_by_hand = true;
+          continue;
+        }
+
+        let dest_url = match clean_urls.then(|| page_url(&dest_url)).flatten() {
+          Some(rewritten) => CowStr::from(rewritten),
+          None => dest_url,
+        };
+        out.push(Event::Start(Tag::Link {
+          link_type,
+          dest_url,
+          title,
+          id,
+        }));
+      }
+      Event::End(TagEnd::Link) if opened_by_hand => {
+        out.push(Event::Html(CowStr::from("</a>")));
+        opened_by_hand = false;
+      }
+      other => out.push(other),
+    }
+  }
+
+  *events = out;
+}
+
+/// Somewhere a new tab is the right answer: another site, over http. A `mailto:`
+/// or a `tel:` hands off to another application and leaves a blank tab behind,
+/// so those are left as they are.
+fn leaves_the_machine(url: &str) -> bool {
+  if url.starts_with("//") {
+    return true;
+  }
+  let Some((scheme, rest)) = url.split_once(':') else {
+    return false;
+  };
+  rest.starts_with("//")
+    && !scheme.is_empty()
+    && scheme
+      .chars()
+      .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '+' | '-' | '.'))
+    && scheme
+      .chars()
+      .next()
+      .is_some_and(|ch| ch.is_ascii_alphabetic())
+}
+
+/// The clean URL a `.md` link resolves to, or `None` when the link does not
+/// point at a document. Any `#fragment` or `?query` rides along untouched.
+fn page_url(dest: &str) -> Option<String> {
+  let cut = dest.find(['#', '?']).unwrap_or(dest.len());
+  let (path, suffix) = dest.split_at(cut);
+  let stem = path.strip_suffix(".md")?;
+
+  // `docs/index.md` is the folder, the same fold the redirect makes.
+  let page = if stem == "index" {
+    "./".to_string()
+  } else if let Some(parent) = stem.strip_suffix("index")
+    && parent.ends_with('/')
+  {
+    parent.to_string()
+  } else {
+    stem.to_string()
+  };
+
+  Some(format!("{page}{suffix}"))
+}
+
+/// Enough escaping for a value inside a double-quoted attribute.
+fn escape(value: &str) -> String {
+  value
+    .replace('&', "&amp;")
+    .replace('<', "&lt;")
+    .replace('>', "&gt;")
+    .replace('"', "&quot;")
 }
 
 /// Front matter is configuration for some other tool. It is asked for only so
@@ -199,7 +306,11 @@ mod tests {
   use super::*;
 
   fn body(source: &str) -> String {
-    render(source, "doc.md").body
+    render(source, "doc.md", true).body
+  }
+
+  fn render_with(source: &str, name: &str, clean_urls: bool) -> Rendered {
+    render(source, name, clean_urls)
   }
 
   /// The words on the page, with the markup taken off — highlighting splits a
@@ -228,12 +339,12 @@ mod tests {
 
   #[test]
   fn the_title_is_the_first_heading() {
-    assert_eq!(render("# Reading\n\ntext", "doc.md").title, "Reading");
+    assert_eq!(render("# Reading\n\ntext", "doc.md", true).title, "Reading");
   }
 
   #[test]
   fn a_document_without_a_heading_is_titled_by_its_file_name() {
-    assert_eq!(render("just text", "notes.md").title, "notes.md");
+    assert_eq!(render("just text", "notes.md", true).title, "notes.md");
   }
 
   #[test]
@@ -295,7 +406,7 @@ mod tests {
   #[test]
   fn front_matter_does_not_become_the_title() {
     // The metadata is skipped whole, so the first real heading still wins.
-    let doc = render("---\ntitle: Meta\n---\n\n# Real\n", "doc.md");
+    let doc = render("---\ntitle: Meta\n---\n\n# Real\n", "doc.md", true);
     assert_eq!(doc.title, "Real");
   }
 
@@ -372,6 +483,108 @@ mod tests {
     let html = body("```rust\nlet x = 1;\n```\n");
     assert!(html.contains(r#"<code class="language-rust">"#), "{html}");
     assert!(!html.contains("<span class=\"hl-"), "{html}");
+  }
+
+  // ---- links ------------------------------------------------------------
+
+  fn href(source: &str) -> String {
+    let html = body(source);
+    let start = html.find("href=\"").expect("a link") + 6;
+    let rest = &html[start..];
+    rest[..rest.find('"').expect("a closing quote")].to_string()
+  }
+
+  #[test]
+  fn a_markdown_link_points_at_the_rendered_page() {
+    // The 301 from /guide.md to /guide already works; this saves the hop.
+    assert_eq!(href("[g](guide.md)"), "guide");
+    assert_eq!(href("[g](./guide.md)"), "./guide");
+    assert_eq!(href("[g](../docs/guide.md)"), "../docs/guide");
+    assert_eq!(href("[g](/docs/guide.md)"), "/docs/guide");
+  }
+
+  #[test]
+  fn a_link_to_an_index_points_at_the_folder() {
+    assert_eq!(href("[i](docs/index.md)"), "docs/");
+    assert_eq!(href("[i](/docs/index.md)"), "/docs/");
+    assert_eq!(href("[i](/index.md)"), "/");
+    assert_eq!(href("[i](index.md)"), "./");
+  }
+
+  #[test]
+  fn a_readme_link_is_not_folded_into_its_folder() {
+    // `/README` resolves — the suffix probe finds README.md. Folding it to the
+    // folder would be a guess, and wrong the day an index.md appears beside it.
+    assert_eq!(href("[r](README.md)"), "README");
+    assert_eq!(href("[r](docs/README.md)"), "docs/README");
+  }
+
+  #[test]
+  fn a_fragment_or_query_survives_the_rewrite() {
+    assert_eq!(href("[g](guide.md#install)"), "guide#install");
+    assert_eq!(href("[g](guide.md?x=1)"), "guide?x=1");
+    assert_eq!(href("[g](docs/index.md#top)"), "docs/#top");
+  }
+
+  #[test]
+  fn a_bare_fragment_is_not_touched() {
+    assert_eq!(href("[s](#install)"), "#install");
+  }
+
+  #[test]
+  fn a_link_to_something_else_is_not_touched() {
+    assert_eq!(href("[i](diagram.png)"), "diagram.png");
+    assert_eq!(href("[p](about)"), "about");
+    assert_eq!(href("[m](notes.markdown)"), "notes.markdown");
+  }
+
+  #[test]
+  fn literal_urls_are_left_alone_when_clean_urls_are_off() {
+    // `-e` serves paths exactly as written, so there is nothing to strip.
+    let doc = render_with("[g](guide.md)", "doc.md", false);
+    assert!(doc.body.contains(r#"href="guide.md""#), "{}", doc.body);
+  }
+
+  #[test]
+  fn an_external_link_opens_in_its_own_tab() {
+    let html = body("[e](https://example.com/x)");
+    assert!(html.contains(r#"href="https://example.com/x""#), "{html}");
+    assert!(html.contains(r#"target="_blank""#), "{html}");
+    assert!(html.contains(r#"rel="noopener""#), "{html}");
+  }
+
+  #[test]
+  fn a_protocol_relative_link_counts_as_external() {
+    assert!(body("[e](//example.com/x)").contains(r#"target="_blank""#));
+  }
+
+  #[test]
+  fn a_mail_link_gets_neither() {
+    // A new tab for a mail client is just a blank tab left behind.
+    let html = body("[m](mailto:alex@example.com)");
+    assert!(html.contains(r#"href="mailto:alex@example.com""#), "{html}");
+    assert!(!html.contains("target="), "{html}");
+  }
+
+  #[test]
+  fn an_internal_link_stays_in_the_tab() {
+    assert!(!body("[g](guide.md)").contains("target="));
+    assert!(!body("[p](/about)").contains("target="));
+  }
+
+  #[test]
+  fn an_external_link_keeps_its_title_and_its_text() {
+    let html = body(r#"[**bold** text](https://example.com "the title")"#);
+    assert!(html.contains(r#"title="the title""#), "{html}");
+    assert!(html.contains("<strong>bold</strong> text"), "{html}");
+    assert!(html.contains("</a>"), "{html}");
+  }
+
+  #[test]
+  fn a_quote_in_an_external_url_cannot_break_out_of_the_attribute() {
+    let html = body(r#"[e](https://example.com/?q="onmouseover=x)"#);
+    assert!(!html.contains(r#"?q="onmouseover"#), "{html}");
+    assert!(html.contains("&quot;"), "{html}");
   }
 
   #[test]
