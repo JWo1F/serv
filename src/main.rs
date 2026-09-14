@@ -4,6 +4,8 @@ mod cli;
 mod compress;
 mod config;
 mod file;
+#[cfg(feature = "highlight")]
+mod highlight;
 mod logging;
 mod markdown;
 mod pages;

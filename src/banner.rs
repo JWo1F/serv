@@ -86,6 +86,10 @@ pub fn print(config: &Config, addr: SocketAddr, quiet: bool) {
   };
   row(&mut out, &paint, "urls", &urls);
 
+  if let Some(value) = markdown(&paint, config.markdown) {
+    row(&mut out, &paint, "markdown", &value);
+  }
+
   row(
     &mut out,
     &paint,
@@ -101,6 +105,27 @@ pub fn print(config: &Config, addr: SocketAddr, quiet: bool) {
 
   let _ = writeln!(out, "\n  {}", paint.on(DIM, "ctrl-c to stop"));
   print!("{out}");
+}
+
+/// What `-m` is doing, when it is doing anything. Silent otherwise: a row
+/// saying a feature is off is a row nobody asked for.
+fn markdown(paint: &Paint, on: bool) -> Option<String> {
+  if !on {
+    return None;
+  }
+  let code = if cfg!(feature = "highlight") {
+    "· code highlighted"
+  } else {
+    "· code plain"
+  };
+  Some(format!(
+    "{} {}",
+    paint.on(GREEN, "rendered"),
+    paint.on(
+      DIM,
+      &format!("· folders fall back to index.md, then README.md {code}")
+    )
+  ))
 }
 
 /// The address, boxed — it is the one line anyone actually needs.
@@ -339,6 +364,28 @@ mod tests {
     assert_eq!(lines[1], "  not found    built-in page");
     // The values start in the same column, which is the point of the padding.
     assert_eq!(lines[0].find("~/site"), lines[1].find("built-in page"));
+  }
+
+  #[test]
+  fn markdown_is_only_mentioned_when_it_is_on() {
+    assert_eq!(markdown(&plain(), false), None);
+  }
+
+  #[test]
+  fn the_markdown_row_says_what_a_folder_will_do() {
+    let row = markdown(&plain(), true).expect("a row");
+    assert!(row.contains("index.md"), "{row}");
+    assert!(row.contains("README.md"), "{row}");
+  }
+
+  #[test]
+  fn the_markdown_row_says_whether_highlighting_is_built_in() {
+    let row = markdown(&plain(), true).expect("a row");
+    if cfg!(feature = "highlight") {
+      assert!(row.contains("highlighted"), "{row}");
+    } else {
+      assert!(!row.contains("highlighted"), "{row}");
+    }
   }
 
   #[test]

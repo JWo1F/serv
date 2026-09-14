@@ -30,6 +30,8 @@ pub fn render(source: &str, name: &str) -> Rendered {
   let mut events: Vec<Event<'_>> = Parser::new_ext(source, options()).collect();
   drop_metadata(&mut events);
   anchor_headings(&mut events);
+  #[cfg(feature = "highlight")]
+  highlight_code(&mut events);
 
   let mut body = String::new();
   html::push_html(&mut body, events.iter().cloned());
@@ -38,6 +40,57 @@ pub fn render(source: &str, name: &str) -> Rendered {
     title: heading(&events).unwrap_or_else(|| name.to_string()),
     body,
   }
+}
+
+/// Replace each fenced block whose language syntect recognises with the HTML it
+/// produces. A block it does not recognise is left exactly as it was, so the
+/// plain rendering stays the fallback rather than an error path.
+#[cfg(feature = "highlight")]
+fn highlight_code(events: &mut Vec<Event<'_>>) {
+  use pulldown_cmark::{CodeBlockKind, CowStr};
+
+  let mut out: Vec<Event<'_>> = Vec::with_capacity(events.len());
+  let mut rest = std::mem::take(events).into_iter().peekable();
+
+  while let Some(event) = rest.next() {
+    let Event::Start(Tag::CodeBlock(CodeBlockKind::Fenced(lang))) = &event else {
+      out.push(event);
+      continue;
+    };
+    // The language is the first word of the info string: ```rust,ignore.
+    let lang = lang
+      .split([',', ' '])
+      .next()
+      .unwrap_or_default()
+      .to_string();
+
+    let mut code = String::new();
+    let mut block = Vec::new();
+    while let Some(inner) = rest.peek() {
+      match inner {
+        Event::End(TagEnd::CodeBlock) => break,
+        Event::Text(text) => code.push_str(text),
+        _ => {}
+      }
+      block.push(rest.next().expect("peeked"));
+    }
+    let end = rest.next();
+
+    match crate::highlight::code(&code, &lang) {
+      Some(highlighted) => {
+        out.push(Event::Html(CowStr::from(format!(
+          "<pre class=\"hl language-{lang}\"><code>{highlighted}</code></pre>\n"
+        ))));
+      }
+      None => {
+        out.push(event);
+        out.extend(block);
+        out.extend(end);
+      }
+    }
+  }
+
+  *events = out;
 }
 
 /// Front matter is configuration for some other tool. It is asked for only so
@@ -149,6 +202,25 @@ mod tests {
     render(source, "doc.md").body
   }
 
+  /// The words on the page, with the markup taken off — highlighting splits a
+  /// line into spans, so the text has to be compared without them.
+  fn words(html: &str) -> String {
+    let mut out = String::new();
+    let mut inside = false;
+    for ch in html.chars() {
+      match ch {
+        '<' => inside = true,
+        '>' => inside = false,
+        _ if !inside => out.push(ch),
+        _ => {}
+      }
+    }
+    out
+      .replace("&lt;", "<")
+      .replace("&gt;", ">")
+      .replace("&amp;", "&")
+  }
+
   #[test]
   fn renders_a_paragraph() {
     assert_eq!(body("hello"), "<p>hello</p>\n");
@@ -256,6 +328,50 @@ mod tests {
   fn a_heading_of_only_punctuation_still_gets_some_anchor() {
     let html = body("## ???\n");
     assert!(html.contains("id=\""), "{html}");
+  }
+
+  #[test]
+  fn a_fenced_block_keeps_its_code_whatever_is_compiled_in() {
+    let html = body("```rust\nlet x = 1;\n```\n");
+    assert!(html.contains("<pre"), "{html}");
+    assert!(words(&html).contains("let x = 1;"), "{html}");
+  }
+
+  #[test]
+  fn a_fence_in_an_unknown_language_is_left_plain() {
+    let html = body("```nosuchlanguage\nwhatever\n```\n");
+    assert!(words(&html).contains("whatever"), "{html}");
+    assert!(!html.contains("<span class=\"hl-"), "{html}");
+  }
+
+  #[test]
+  fn an_unfenced_block_is_left_plain() {
+    let html = body("    indented code\n");
+    assert!(words(&html).contains("indented code"), "{html}");
+    assert!(!html.contains("<span class=\"hl-"), "{html}");
+  }
+
+  #[test]
+  fn code_is_escaped_rather_than_interpreted() {
+    let html = body("```rust\nlet s = \"<b>\";\n```\n");
+    assert!(!html.contains("<b>"), "{html}");
+    assert!(html.contains("&lt;b&gt;"), "{html}");
+    assert!(words(&html).contains("<b>"), "{html}");
+  }
+
+  #[cfg(feature = "highlight")]
+  #[test]
+  fn a_known_language_is_highlighted_into_spans() {
+    let html = body("```rust\nlet x = 1;\n```\n");
+    assert!(html.contains("<span class=\"hl-"), "{html}");
+  }
+
+  #[cfg(not(feature = "highlight"))]
+  #[test]
+  fn without_the_feature_a_fence_keeps_its_language_class() {
+    let html = body("```rust\nlet x = 1;\n```\n");
+    assert!(html.contains(r#"<code class="language-rust">"#), "{html}");
+    assert!(!html.contains("<span class=\"hl-"), "{html}");
   }
 
   #[test]
