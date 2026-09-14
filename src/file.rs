@@ -241,21 +241,534 @@ fn needs_charset(mime: &Mime) -> bool {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::testkit::{Req, Site};
+
+  /// Big enough to be worth compressing, and compressible.
+  fn prose() -> String {
+    "the quick brown fox jumps over the lazy dog\n".repeat(64)
+  }
+
+  // ---- validators and revalidation --------------------------------------
+
+  #[tokio::test]
+  async fn every_response_carries_an_etag_and_asks_to_revalidate() {
+    let site = Site::new().file("a.txt", "hello");
+    let reply = site.get("/a.txt").await;
+
+    assert_eq!(reply.status, 200);
+    assert_eq!(reply.header("cache-control"), Some("no-cache"));
+    let tag = reply.header("etag").expect("an etag");
+    assert!(tag.starts_with('"') && tag.ends_with('"'), "{tag}");
+    assert!(tag.contains('-'), "{tag}");
+  }
+
+  #[tokio::test]
+  async fn the_same_file_keeps_the_same_etag() {
+    let site = Site::new().file("a.txt", "hello");
+
+    let first = site.get("/a.txt").await;
+    let second = site.get("/a.txt").await;
+    assert_eq!(first.header("etag"), second.header("etag"));
+  }
+
+  #[tokio::test]
+  async fn a_changed_file_gets_a_new_etag() {
+    let site = Site::new().file("a.txt", "hello");
+    let before = site.get("/a.txt").await.header("etag").unwrap().to_string();
+
+    std::fs::write(site.path().join("a.txt"), "hello, again").unwrap();
+    let after = site.get("/a.txt").await.header("etag").unwrap().to_string();
+
+    assert_ne!(before, after);
+  }
+
+  #[tokio::test]
+  async fn a_matching_validator_is_answered_with_304() {
+    let site = Site::new().file("a.txt", "hello");
+    let tag = site.get("/a.txt").await.header("etag").unwrap().to_string();
+
+    let reply = site
+      .send(Req::get("/a.txt").header("if-none-match", &tag))
+      .await;
+
+    assert_eq!(reply.status, 304);
+    assert!(reply.body.is_empty());
+    // The validators come back with the 304, so the browser can keep using them.
+    assert_eq!(reply.header("etag"), Some(tag.as_str()));
+    assert_eq!(reply.header("cache-control"), Some("no-cache"));
+    assert!(reply.has("last-modified"));
+  }
+
+  #[tokio::test]
+  async fn a_wildcard_validator_matches_anything() {
+    let site = Site::new().file("a.txt", "hello");
+    let reply = site
+      .send(Req::get("/a.txt").header("if-none-match", "*"))
+      .await;
+
+    assert_eq!(reply.status, 304);
+  }
+
+  #[tokio::test]
+  async fn a_validator_in_a_list_still_matches() {
+    let site = Site::new().file("a.txt", "hello");
+    let tag = site.get("/a.txt").await.header("etag").unwrap().to_string();
+    let list = format!("\"stale\", {tag}, \"older\"");
+
+    let reply = site
+      .send(Req::get("/a.txt").header("if-none-match", &list))
+      .await;
+
+    assert_eq!(reply.status, 304);
+  }
+
+  #[tokio::test]
+  async fn a_stale_validator_gets_the_file() {
+    let site = Site::new().file("a.txt", "hello");
+    let reply = site
+      .send(Req::get("/a.txt").header("if-none-match", "\"nonsense\""))
+      .await;
+
+    assert_eq!(reply.status, 200);
+    assert_eq!(reply.text(), "hello");
+  }
+
+  #[tokio::test]
+  async fn a_file_reports_when_it_was_last_modified() {
+    let site = Site::new().file("a.txt", "hello");
+    let reply = site.get("/a.txt").await;
+
+    let stamp = reply.header("last-modified").expect("a date");
+    assert!(httpdate::parse_http_date(stamp).is_ok(), "{stamp}");
+    assert!(stamp.ends_with("GMT"), "{stamp}");
+  }
+
+  #[tokio::test]
+  async fn a_not_found_page_is_never_answered_with_304() {
+    // Revalidation is only offered for a 200; a 404 body that is up to date is
+    // still a 404 the browser has to be told about.
+    let site = Site::new().not_found("404.html").file("404.html", "gone");
+    let reply = site
+      .send(Req::get("/missing").header("if-none-match", "*"))
+      .await;
+
+    assert_eq!(reply.status, 404);
+    assert_eq!(reply.text(), "gone");
+  }
+
+  // ---- ranges -----------------------------------------------------------
+
+  #[tokio::test]
+  async fn a_whole_file_advertises_that_ranges_are_accepted() {
+    let site = Site::new().file("a.bin", "0123456789");
+    let reply = site.get("/a.bin").await;
+
+    assert_eq!(reply.header("accept-ranges"), Some("bytes"));
+    assert_eq!(reply.content_length(), Some(10));
+    assert!(!reply.has("content-range"));
+  }
+
+  #[tokio::test]
+  async fn a_closed_range_is_answered_with_206() {
+    let site = Site::new().file("a.bin", "0123456789");
+    let reply = site
+      .send(Req::get("/a.bin").header("range", "bytes=2-5"))
+      .await;
+
+    assert_eq!(reply.status, 206);
+    assert_eq!(reply.header("content-range"), Some("bytes 2-5/10"));
+    assert_eq!(reply.content_length(), Some(4));
+    assert_eq!(reply.text(), "2345");
+  }
+
+  #[tokio::test]
+  async fn an_open_ended_range_runs_to_the_end() {
+    let site = Site::new().file("a.bin", "0123456789");
+    let reply = site
+      .send(Req::get("/a.bin").header("range", "bytes=7-"))
+      .await;
+
+    assert_eq!(reply.status, 206);
+    assert_eq!(reply.header("content-range"), Some("bytes 7-9/10"));
+    assert_eq!(reply.text(), "789");
+  }
+
+  #[tokio::test]
+  async fn a_suffix_range_counts_back_from_the_end() {
+    let site = Site::new().file("a.bin", "0123456789");
+    let reply = site
+      .send(Req::get("/a.bin").header("range", "bytes=-3"))
+      .await;
+
+    assert_eq!(reply.status, 206);
+    assert_eq!(reply.header("content-range"), Some("bytes 7-9/10"));
+    assert_eq!(reply.text(), "789");
+  }
+
+  #[tokio::test]
+  async fn a_suffix_longer_than_the_file_is_the_whole_file() {
+    let site = Site::new().file("a.bin", "0123456789");
+    let reply = site
+      .send(Req::get("/a.bin").header("range", "bytes=-99"))
+      .await;
+
+    assert_eq!(reply.status, 206);
+    assert_eq!(reply.header("content-range"), Some("bytes 0-9/10"));
+    assert_eq!(reply.text(), "0123456789");
+  }
+
+  #[tokio::test]
+  async fn a_range_starting_past_the_end_is_unsatisfiable() {
+    let site = Site::new().file("a.bin", "0123456789");
+    let reply = site
+      .send(Req::get("/a.bin").header("range", "bytes=10-20"))
+      .await;
+
+    assert_eq!(reply.status, 416);
+    assert_eq!(reply.header("content-range"), Some("bytes */10"));
+    assert_eq!(reply.content_length(), Some(0));
+    assert!(reply.body.is_empty());
+  }
+
+  #[tokio::test]
+  async fn a_malformed_range_gets_the_whole_file() {
+    // Answering in full is a response every client accepts, which beats failing
+    // a download over a header nobody can read.
+    let site = Site::new().file("a.bin", "0123456789");
+
+    for spec in [
+      "items=0-1",
+      "bytes=0-1,4-5",
+      "bytes=abc-",
+      "bytes",
+      "nonsense",
+    ] {
+      let reply = site.send(Req::get("/a.bin").header("range", spec)).await;
+      assert_eq!(reply.status, 200, "{spec}");
+      assert_eq!(reply.text(), "0123456789", "{spec}");
+    }
+  }
+
+  #[tokio::test]
+  async fn a_resumed_download_of_an_unchanged_file_gets_its_range() {
+    let site = Site::new().file("a.bin", "0123456789");
+    let tag = site.get("/a.bin").await.header("etag").unwrap().to_string();
+
+    let reply = site
+      .send(
+        Req::get("/a.bin")
+          .header("if-range", &tag)
+          .header("range", "bytes=5-"),
+      )
+      .await;
+
+    assert_eq!(reply.status, 206);
+    assert_eq!(reply.text(), "56789");
+  }
+
+  #[tokio::test]
+  async fn a_resumed_download_of_a_changed_file_gets_the_whole_thing() {
+    // The alternative is splicing new bytes onto an old prefix, which is a
+    // corrupt file that looks like a successful download.
+    let site = Site::new().file("a.bin", "0123456789");
+    let reply = site
+      .send(
+        Req::get("/a.bin")
+          .header("if-range", "\"stale\"")
+          .header("range", "bytes=5-"),
+      )
+      .await;
+
+    assert_eq!(reply.status, 200);
+    assert_eq!(reply.text(), "0123456789");
+  }
+
+  #[tokio::test]
+  async fn an_if_range_given_as_a_date_falls_back_to_the_whole_file() {
+    // Only the entity-tag form is understood. A date never matches the ETag, so
+    // the request is treated as a changed file — safe, if conservative.
+    let site = Site::new().file("a.bin", "0123456789");
+    let stamp = site
+      .get("/a.bin")
+      .await
+      .header("last-modified")
+      .unwrap()
+      .to_string();
+
+    let reply = site
+      .send(
+        Req::get("/a.bin")
+          .header("if-range", &stamp)
+          .header("range", "bytes=5-"),
+      )
+      .await;
+
+    assert_eq!(reply.status, 200);
+    assert_eq!(reply.text(), "0123456789");
+  }
+
+  #[tokio::test]
+  async fn head_answers_a_range_with_its_headers_and_no_body() {
+    let site = Site::new().file("a.bin", "0123456789");
+    let reply = site
+      .send(Req::head("/a.bin").header("range", "bytes=2-5"))
+      .await;
+
+    assert_eq!(reply.status, 206);
+    assert_eq!(reply.header("content-range"), Some("bytes 2-5/10"));
+    assert_eq!(reply.content_length(), Some(4));
+    assert!(reply.body.is_empty());
+  }
+
+  #[tokio::test]
+  async fn a_not_found_page_is_never_ranged() {
+    // Range handling is gated on a 200; a partial 404 body would be nonsense.
+    let site = Site::new()
+      .not_found("404.html")
+      .file("404.html", "0123456789");
+    let reply = site
+      .send(Req::get("/missing").header("range", "bytes=2-5"))
+      .await;
+
+    assert_eq!(reply.status, 404);
+    assert_eq!(reply.text(), "0123456789");
+  }
+
+  // ---- compression ------------------------------------------------------
+
+  #[tokio::test]
+  async fn text_over_a_kilobyte_is_gzipped_when_it_is_welcome() {
+    let body = prose();
+    let site = Site::new().file("a.txt", &body);
+    let reply = site
+      .send(Req::get("/a.txt").header("accept-encoding", "gzip, deflate, br"))
+      .await;
+
+    assert_eq!(reply.status, 200);
+    assert_eq!(reply.header("content-encoding"), Some("gzip"));
+    assert_eq!(reply.header("vary"), Some("accept-encoding"));
+    assert_eq!(reply.content_length(), Some(reply.body.len() as u64));
+    assert!(reply.body.len() < body.len());
+    assert_eq!(reply.gunzip(), body.as_bytes());
+  }
+
+  #[tokio::test]
+  async fn a_compressed_body_gets_an_etag_of_its_own() {
+    // A gzipped body is a different representation, and must not be confused
+    // with the identity one a previous request cached.
+    let site = Site::new().file("a.txt", prose());
+
+    let plain = site.get("/a.txt").await;
+    let packed = site
+      .send(Req::get("/a.txt").header("accept-encoding", "gzip"))
+      .await;
+
+    assert!(packed.header("etag").unwrap().ends_with("-gz\""));
+    assert_ne!(plain.header("etag"), packed.header("etag"));
+  }
+
+  #[tokio::test]
+  async fn a_compressed_body_revalidates_against_its_own_etag() {
+    let site = Site::new().file("a.txt", prose());
+    let tag = site
+      .send(Req::get("/a.txt").header("accept-encoding", "gzip"))
+      .await
+      .header("etag")
+      .unwrap()
+      .to_string();
+
+    let matched = site
+      .send(
+        Req::get("/a.txt")
+          .header("accept-encoding", "gzip")
+          .header("if-none-match", &tag),
+      )
+      .await;
+    assert_eq!(matched.status, 304);
+
+    // The same tag offered without gzip is the wrong representation.
+    let mismatched = site
+      .send(Req::get("/a.txt").header("if-none-match", &tag))
+      .await;
+    assert_eq!(mismatched.status, 200);
+  }
+
+  #[tokio::test]
+  async fn a_refusal_is_honoured() {
+    let site = Site::new().file("a.txt", prose());
+    let reply = site
+      .send(Req::get("/a.txt").header("accept-encoding", "gzip;q=0"))
+      .await;
+
+    assert!(!reply.has("content-encoding"));
+    assert_eq!(reply.text(), prose());
+  }
+
+  #[tokio::test]
+  async fn a_client_that_says_nothing_gets_the_bytes_as_they_are() {
+    let site = Site::new().file("a.txt", prose());
+    let reply = site.get("/a.txt").await;
+
+    assert!(!reply.has("content-encoding"));
+    assert_eq!(reply.text(), prose());
+  }
+
+  #[tokio::test]
+  async fn anything_under_a_kilobyte_is_left_alone() {
+    // Below the threshold the gzip framing costs more than it saves.
+    let site = Site::new()
+      .file("small.txt", "x".repeat(1023))
+      .file("exact.txt", "x".repeat(1024));
+
+    let small = site
+      .send(Req::get("/small.txt").header("accept-encoding", "gzip"))
+      .await;
+    assert!(!small.has("content-encoding"));
+
+    let exact = site
+      .send(Req::get("/exact.txt").header("accept-encoding", "gzip"))
+      .await;
+    assert_eq!(exact.header("content-encoding"), Some("gzip"));
+  }
+
+  #[tokio::test]
+  async fn anything_over_eight_megabytes_keeps_its_streaming_path() {
+    // Past the ceiling the file is never buffered, so it keeps range support
+    // and a memory cost that does not track its size.
+    let site = Site::new().file("big.txt", "x".repeat(8 * 1024 * 1024 + 1));
+    let reply = site
+      .send(Req::get("/big.txt").header("accept-encoding", "gzip"))
+      .await;
+
+    assert!(!reply.has("content-encoding"));
+    assert_eq!(reply.header("accept-ranges"), Some("bytes"));
+    assert_eq!(reply.content_length(), Some(8 * 1024 * 1024 + 1));
+  }
+
+  #[tokio::test]
+  async fn an_already_compressed_format_is_sent_as_it_is() {
+    let site = Site::new().file("a.png", "x".repeat(4096));
+    let reply = site
+      .send(Req::get("/a.png").header("accept-encoding", "gzip"))
+      .await;
+
+    assert!(!reply.has("content-encoding"));
+    // Nothing varies by encoding, so the response does not claim it does.
+    assert!(!reply.has("vary"));
+    assert_eq!(reply.header("accept-ranges"), Some("bytes"));
+  }
+
+  #[tokio::test]
+  async fn a_compressible_type_says_it_varies_even_uncompressed() {
+    // A shared cache must not hand a gzipped body to a client that cannot read
+    // one, so the header is set whenever the answer could have differed.
+    let site = Site::new().file("a.css", "x".repeat(16));
+    let reply = site.get("/a.css").await;
+
+    assert_eq!(reply.header("vary"), Some("accept-encoding"));
+    assert!(!reply.has("content-encoding"));
+  }
+
+  #[tokio::test]
+  async fn a_compressed_body_is_not_ranged() {
+    // Current behaviour: compression is decided first and returns whole, so a
+    // range on a gzip-able text file is answered with the entire compressed
+    // body — and without `Accept-Ranges`, so a client has been told as much.
+    let site = Site::new().file("a.txt", prose());
+    let reply = site
+      .send(
+        Req::get("/a.txt")
+          .header("accept-encoding", "gzip")
+          .header("range", "bytes=0-9"),
+      )
+      .await;
+
+    assert_eq!(reply.status, 200);
+    assert_eq!(reply.header("content-encoding"), Some("gzip"));
+    assert!(!reply.has("accept-ranges"));
+    assert_eq!(reply.gunzip(), prose().as_bytes());
+  }
+
+  #[tokio::test]
+  async fn a_not_found_page_is_never_compressed() {
+    let site = Site::new().not_found("404.html").file("404.html", prose());
+    let reply = site
+      .send(Req::get("/missing").header("accept-encoding", "gzip"))
+      .await;
+
+    assert_eq!(reply.status, 404);
+    assert!(!reply.has("content-encoding"));
+  }
+
+  #[tokio::test]
+  async fn head_of_a_compressed_body_declares_the_compressed_length() {
+    let site = Site::new().file("a.txt", prose());
+    let reply = site
+      .send(Req::head("/a.txt").header("accept-encoding", "gzip"))
+      .await;
+
+    assert_eq!(reply.header("content-encoding"), Some("gzip"));
+    assert!(reply.body.is_empty());
+    assert!(reply.content_length().unwrap() < prose().len() as u64);
+  }
+
+  // ---- content types ----------------------------------------------------
+
+  #[tokio::test]
+  async fn guesses_the_content_type_from_the_name() {
+    let site = Site::new()
+      .file("a.css", "x")
+      .file("a.js", "x")
+      .file("a.png", "x")
+      .file("a.bin", "x");
+
+    assert_eq!(
+      site.get("/a.css").await.header("content-type"),
+      Some("text/css; charset=utf-8")
+    );
+    assert!(
+      site
+        .get("/a.js")
+        .await
+        .header("content-type")
+        .unwrap()
+        .contains("javascript")
+    );
+    assert_eq!(
+      site.get("/a.png").await.header("content-type"),
+      Some("image/png")
+    );
+    assert_eq!(
+      site.get("/a.bin").await.header("content-type"),
+      Some("application/octet-stream")
+    );
+  }
+
+  // ---- the parts, on their own ------------------------------------------
 
   #[test]
   fn reads_a_closed_range() {
     assert_eq!(parse_range("bytes=2-5", 10), Range::Partial(2, 5));
+    assert_eq!(parse_range("bytes=0-0", 10), Range::Partial(0, 0));
+    assert_eq!(parse_range("bytes=0-9", 10), Range::Partial(0, 9));
   }
 
   #[test]
   fn reads_an_open_range() {
     assert_eq!(parse_range("bytes=7-", 10), Range::Partial(7, 9));
+    assert_eq!(parse_range("bytes=0-", 10), Range::Partial(0, 9));
   }
 
   #[test]
   fn reads_a_suffix_range() {
     assert_eq!(parse_range("bytes=-3", 10), Range::Partial(7, 9));
     assert_eq!(parse_range("bytes=-99", 10), Range::Partial(0, 9));
+    assert_eq!(parse_range("bytes=-10", 10), Range::Partial(0, 9));
+  }
+
+  #[test]
+  fn tolerates_whitespace_around_the_spec() {
+    assert_eq!(parse_range("bytes= 2 - 5 ", 10), Range::Partial(2, 5));
   }
 
   #[test]
@@ -266,7 +779,13 @@ mod tests {
   #[test]
   fn rejects_a_range_that_starts_past_the_file() {
     assert_eq!(parse_range("bytes=10-12", 10), Range::Unsatisfiable);
+    assert_eq!(parse_range("bytes=10-", 10), Range::Unsatisfiable);
     assert_eq!(parse_range("bytes=-0", 10), Range::Unsatisfiable);
+  }
+
+  #[test]
+  fn rejects_a_range_that_runs_backwards() {
+    assert_eq!(parse_range("bytes=5-3", 10), Range::Unsatisfiable);
   }
 
   #[test]
@@ -274,6 +793,75 @@ mod tests {
     assert_eq!(parse_range("items=0-1", 10), Range::Whole);
     assert_eq!(parse_range("bytes=0-1,4-5", 10), Range::Whole);
     assert_eq!(parse_range("bytes=abc-", 10), Range::Whole);
+    assert_eq!(parse_range("bytes=1-abc", 10), Range::Whole);
+    assert_eq!(parse_range("bytes=nonsense", 10), Range::Whole);
+    assert_eq!(parse_range("", 10), Range::Whole);
+  }
+
+  #[test]
+  #[ignore = "known bug: `len - 1` underflows for a zero-length file; see the \
+              test body"]
+  fn a_range_over_an_empty_file_is_unsatisfiable() {
+    // Every arm of `parse_range` computes `len - 1`, which underflows when the
+    // file is empty. A debug build panics and the connection dies; a release
+    // build wraps to u64::MAX and the `len == 0` guard below catches it, so
+    // this is the answer only half the time. Reachable over HTTP with a `Range`
+    // header against any zero-byte file.
+    assert_eq!(parse_range("bytes=0-", 0), Range::Unsatisfiable);
+    assert_eq!(parse_range("bytes=-5", 0), Range::Unsatisfiable);
+    assert_eq!(parse_range("bytes=0-5", 0), Range::Unsatisfiable);
+  }
+
+  #[test]
+  fn an_etag_is_built_from_the_size_and_the_timestamp() {
+    let epoch = UNIX_EPOCH;
+    assert_eq!(etag(0, Some(epoch), None), "\"0-0\"");
+    assert_eq!(
+      etag(255, Some(epoch + std::time::Duration::from_secs(1)), None),
+      "\"ff-3b9aca00\""
+    );
+  }
+
+  #[test]
+  fn an_etag_without_a_timestamp_still_has_a_shape() {
+    // Some filesystems have no mtime to give; the size alone still changes when
+    // the file does, most of the time.
+    assert_eq!(etag(16, None, None), "\"10-0\"");
+  }
+
+  #[test]
+  fn an_etag_names_its_encoding() {
+    let epoch = Some(UNIX_EPOCH);
+    assert_eq!(etag(0, epoch, Some(Encoding::Gzip)), "\"0-0-gz\"");
+    assert_ne!(etag(0, epoch, None), etag(0, epoch, Some(Encoding::Gzip)));
+  }
+
+  #[test]
+  fn an_etag_moves_with_either_half_of_what_it_is_made_of() {
+    let epoch = Some(UNIX_EPOCH);
+    let later = Some(UNIX_EPOCH + std::time::Duration::from_secs(1));
+
+    assert_ne!(etag(1, epoch, None), etag(2, epoch, None));
+    assert_ne!(etag(1, epoch, None), etag(1, later, None));
+    assert_eq!(etag(1, epoch, None), etag(1, epoch, None));
+  }
+
+  #[test]
+  fn a_validator_matches_itself_a_list_or_a_wildcard() {
+    assert!(matches(Some("\"abc\""), "\"abc\""));
+    assert!(matches(Some("*"), "\"abc\""));
+    assert!(matches(Some("\"x\", \"abc\""), "\"abc\""));
+    assert!(matches(Some("  \"abc\"  "), "\"abc\""));
+  }
+
+  #[test]
+  fn a_validator_does_not_match_anything_else() {
+    assert!(!matches(None, "\"abc\""));
+    assert!(!matches(Some(""), "\"abc\""));
+    assert!(!matches(Some("\"other\""), "\"abc\""));
+    // Current behaviour: a weak validator is not unwrapped, so `W/"abc"` is a
+    // miss. Nothing serv sends is weak, so nothing well-behaved sends one back.
+    assert!(!matches(Some("W/\"abc\""), "\"abc\""));
   }
 
   #[test]
@@ -282,10 +870,28 @@ mod tests {
       content_type(Path::new("a.html")),
       "text/html; charset=utf-8"
     );
+    assert_eq!(content_type(Path::new("a.css")), "text/css; charset=utf-8");
     assert_eq!(
       content_type(Path::new("a.svg")),
       "image/svg+xml; charset=utf-8"
     );
+    assert_eq!(
+      content_type(Path::new("a.json")),
+      "application/json; charset=utf-8"
+    );
     assert_eq!(content_type(Path::new("a.png")), "image/png");
+    assert_eq!(content_type(Path::new("a.woff2")), "font/woff2");
+  }
+
+  #[test]
+  fn an_unknown_name_is_a_stream_of_bytes() {
+    assert_eq!(
+      content_type(Path::new("LICENSE")),
+      "application/octet-stream"
+    );
+    assert_eq!(
+      content_type(Path::new("a.whatever")),
+      "application/octet-stream"
+    );
   }
 }
