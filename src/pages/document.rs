@@ -16,6 +16,8 @@ pub struct Document {
   pub crumbs: Vec<Crumb>,
   /// Absolute path of the served directory, for the colophon.
   pub root: String,
+  /// Whether this document draws a diagram, and so needs mermaid fetched.
+  pub mermaid: bool,
 }
 
 impl Document {
@@ -26,11 +28,16 @@ impl Document {
       body: rendered.body,
       crumbs: crumbs(url_path, root),
       root: root.display().to_string(),
+      mermaid: rendered.mermaid,
     }
   }
 
   pub fn style(&self) -> &'static str {
     crate::pages::STYLE
+  }
+
+  pub fn mermaid_script(&self) -> &'static str {
+    crate::pages::MERMAID
   }
 }
 
@@ -80,6 +87,26 @@ mod tests {
   fn the_page_carries_a_trail_back_up() {
     let html = page("text", "/docs/guide");
     assert!(html.contains(r#"href="/docs/""#), "{html}");
+  }
+
+  #[test]
+  fn a_page_without_a_diagram_loads_no_script() {
+    let html = page("# Reading\n\njust prose", "/x");
+    assert!(!html.contains("<script"), "{html}");
+  }
+
+  #[test]
+  fn a_page_with_a_diagram_loads_mermaid() {
+    let html = page("```mermaid\ngraph TD;\n  A-->B;\n```\n", "/x");
+    assert!(html.contains("<script type=\"module\">"), "{html}");
+    assert!(html.contains("cdn.jsdelivr.net/npm/mermaid@"), "{html}");
+    assert!(html.contains("startOnLoad"), "{html}");
+  }
+
+  #[test]
+  fn the_diagram_follows_the_page_into_dark_mode() {
+    let html = page("```mermaid\ngraph TD;\n  A-->B;\n```\n", "/x");
+    assert!(html.contains("prefers-color-scheme: dark"), "{html}");
   }
 
   #[test]

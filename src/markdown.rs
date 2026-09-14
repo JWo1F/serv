@@ -10,6 +10,8 @@ pub struct Rendered {
   pub title: String,
   /// The document body as HTML, without any surrounding page.
   pub body: String,
+  /// Whether the document draws a diagram, and so needs mermaid fetched.
+  pub mermaid: bool,
 }
 
 /// GitHub's markdown, as close as a reader expects: a README that renders there
@@ -33,6 +35,8 @@ pub fn render(source: &str, name: &str, clean_urls: bool) -> Rendered {
   drop_metadata(&mut events);
   anchor_headings(&mut events);
   rewrite_links(&mut events, clean_urls);
+  // Before the highlighter, which would otherwise set a diagram as source code.
+  let mermaid = extract_diagrams(&mut events);
   #[cfg(feature = "highlight")]
   highlight_code(&mut events);
 
@@ -42,7 +46,54 @@ pub fn render(source: &str, name: &str, clean_urls: bool) -> Rendered {
   Rendered {
     title: heading(&events).unwrap_or_else(|| name.to_string()),
     body,
+    mermaid,
   }
+}
+
+/// Turn each ```mermaid fence into the `<pre class="mermaid">` block the library
+/// looks for, and report whether there was one — a page with no diagram should
+/// not reach for the network.
+fn extract_diagrams(events: &mut Vec<Event<'_>>) -> bool {
+  use pulldown_cmark::{CodeBlockKind, CowStr};
+
+  let mut out: Vec<Event<'_>> = Vec::with_capacity(events.len());
+  let mut rest = std::mem::take(events).into_iter().peekable();
+  let mut found = false;
+
+  while let Some(event) = rest.next() {
+    let Event::Start(Tag::CodeBlock(CodeBlockKind::Fenced(lang))) = &event else {
+      out.push(event);
+      continue;
+    };
+    if !lang
+      .split([',', ' '])
+      .next()
+      .is_some_and(|l| l == "mermaid")
+    {
+      out.push(event);
+      continue;
+    }
+
+    let mut source = String::new();
+    while let Some(inner) = rest.peek() {
+      match inner {
+        Event::End(TagEnd::CodeBlock) => break,
+        Event::Text(text) => source.push_str(text),
+        _ => {}
+      }
+      rest.next();
+    }
+    rest.next();
+
+    found = true;
+    out.push(Event::Html(CowStr::from(format!(
+      "<pre class=\"mermaid\">{}</pre>\n",
+      escape(&source)
+    ))));
+  }
+
+  *events = out;
+  found
 }
 
 /// Replace each fenced block whose language syntect recognises with the HTML it
@@ -585,6 +636,45 @@ mod tests {
     let html = body(r#"[e](https://example.com/?q="onmouseover=x)"#);
     assert!(!html.contains(r#"?q="onmouseover"#), "{html}");
     assert!(html.contains("&quot;"), "{html}");
+  }
+
+  // ---- mermaid ----------------------------------------------------------
+
+  #[test]
+  fn a_mermaid_fence_becomes_a_diagram_block() {
+    let html = body("```mermaid\ngraph TD;\n  A-->B;\n```\n");
+    assert!(html.contains(r#"<pre class="mermaid">"#), "{html}");
+    assert!(html.contains("graph TD;"), "{html}");
+    assert!(!html.contains("<code"), "{html}");
+  }
+
+  #[test]
+  fn a_document_says_whether_it_has_a_diagram() {
+    assert!(!render("no diagrams here", "doc.md", true).mermaid);
+    assert!(render("```mermaid\ngraph TD;\n```\n", "doc.md", true).mermaid);
+  }
+
+  #[test]
+  fn the_diagram_source_is_escaped() {
+    // Mermaid reads the text content, so escaping it costs nothing and keeps a
+    // stray angle bracket from closing the block early.
+    let html = body("```mermaid\ngraph TD;\n  A[\"<b>\"]-->B;\n```\n");
+    assert!(!html.contains("<b>"), "{html}");
+    assert!(html.contains("&lt;b&gt;"), "{html}");
+  }
+
+  #[test]
+  fn a_diagram_is_not_treated_as_code() {
+    // Whether or not syntect is compiled in, a mermaid fence is a diagram.
+    let html = body("```mermaid\ngraph TD;\n  A-->B;\n```\n");
+    assert!(!html.contains("hl-"), "{html}");
+    assert!(!html.contains("language-mermaid"), "{html}");
+  }
+
+  #[test]
+  fn another_fence_is_still_code() {
+    let html = body("```rust\nlet x = 1;\n```\n");
+    assert!(!html.contains(r#"class="mermaid""#), "{html}");
   }
 
   #[test]

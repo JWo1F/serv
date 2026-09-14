@@ -16,6 +16,15 @@ pub const STYLE: &str = include_str!("../../assets/style.css");
 /// block cursor still sitting after it.
 pub const FAVICON: &str = "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect x='2.5' y='10.4' width='7.5' height='3.2' rx='1.6' fill='%23a3372a' opacity='.4'/><rect x='12.5' y='3.6' width='7' height='16.8' rx='1.8' fill='%23a3372a'/></svg>";
 
+/// Mermaid, fetched from a CDN and only by a page that actually draws a
+/// diagram. It is the one thing in serv that reaches the network: no Rust
+/// renders mermaid, so the alternative was 2.6 MB of JavaScript in the binary.
+/// The theme is read from the browser so a diagram matches the sheet it is on.
+pub const MERMAID: &str = "\n\
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@12/dist/mermaid.esm.min.mjs';\n\
+  const dark = window.matchMedia('(prefers-color-scheme: dark)').matches;\n\
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'neutral' });\n";
+
 /// Bytes as a person would read them.
 pub fn human_size(bytes: u64) -> String {
   const UNITS: [&str; 5] = ["B", "kB", "MB", "GB", "TB"];

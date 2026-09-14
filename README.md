@@ -122,11 +122,18 @@ gets the same single address a page does. A folder with no `index.html` shows
 its `index.md`, or failing that its `README.md`, instead of a file listing — so
 pointing serv at a project opens the project. HTML wins every collision, and
 without the flag a `.md` file is served exactly as it is on disk. GitHub's
-extensions are all on: tables, task lists, footnotes, strikethrough. Front
+extensions are all on: tables, task lists, footnotes, strikethrough. Links are
+pointed at the pages serv serves — `guide.md` becomes `guide` — and a link off
+the machine opens in its own tab. Front
 matter is dropped rather than printed, and every heading gets an anchor so the
 `#links` in a README land. Fenced code is set in plain monospace unless serv was
 built with `--features highlight`, which compiles in syntect for real grammars
 and costs several megabytes of binary to do it.
+
+A ```` ```mermaid ```` fence is drawn as a diagram. This is the one thing in
+serv that reaches the network: mermaid is a browser library with no Rust
+equivalent, so a page that draws a diagram — and only such a page — loads it
+from jsdelivr. Everything else still works with the cable out.
 
 **Nothing is cached in the server.** Every request reads the file from disk, so
 what you just saved is what gets sent. The one cache serv takes part in is the
@@ -154,6 +161,10 @@ to the socket, so serving a 2 GB video costs a buffer, not 2 GB of memory.
 serv is a *development* server: it binds to `127.0.0.1` unless you tell it
 otherwise, and it has no authentication, no TLS and no rate limiting. Do not put
 it on the public internet.
+
+It makes no outbound request either, with one exception: a markdown page that
+draws a mermaid diagram loads mermaid from a CDN. A document with no diagram
+never asks.
 
 Path traversal is refused on two levels. Request paths are resolved segment by
 segment — `..` cannot climb above the served folder, and a separator smuggled

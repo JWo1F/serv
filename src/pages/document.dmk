@@ -21,6 +21,10 @@
 
       <article class="prose ink">{@html self.body}</article>
 
+      {#if self.mermaid}
+        <script type="module">{@html self.mermaid_script()}</script>
+      {/if}
+
       <footer class="colophon ink">
         <span class="tag">serv {env!("CARGO_PKG_VERSION")}</span>
         <span class="where">{self.root}</span>
