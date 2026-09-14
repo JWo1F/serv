@@ -4,10 +4,7 @@
 //! is read. Only bodies small enough to sit in memory are considered, so a large
 //! asset keeps its streaming path and its range support.
 //!
-//! gzip is the whole list. Brotli compresses a little tighter, but it carries a
-//! static dictionary and Huffman tables that cost about a megabyte of binary —
-//! roughly half of serv — to save bytes on a connection that never leaves the
-//! machine. Every browser accepts gzip.
+//! gzip is the whole list, and every browser accepts it.
 
 use std::io::{self, Write};
 
