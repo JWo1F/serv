@@ -31,6 +31,7 @@ pub struct Site {
   spa: Option<PathBuf>,
   not_found: Option<PathBuf>,
   ext: bool,
+  markdown: bool,
 }
 
 impl Default for Site {
@@ -46,6 +47,7 @@ impl Site {
       spa: None,
       not_found: None,
       ext: false,
+      markdown: false,
     }
   }
 
@@ -80,6 +82,12 @@ impl Site {
     self
   }
 
+  /// `-m`: render `.md` files as pages.
+  pub fn markdown(mut self) -> Self {
+    self.markdown = true;
+    self
+  }
+
   /// `-e`: serve paths exactly as written.
   pub fn ext(mut self) -> Self {
     self.ext = true;
@@ -95,6 +103,7 @@ impl Site {
       spa: self.spa.as_ref().map(|p| root.join(p)),
       not_found: self.not_found.as_ref().map(|p| root.join(p)),
       ext: self.ext,
+      markdown: self.markdown,
       root,
     })
   }

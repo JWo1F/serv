@@ -3,6 +3,7 @@
 //! Both are Damask components — the template is compiled into the binary, so a
 //! page that reads a field the struct does not have is a build failure.
 
+pub mod document;
 pub mod icons;
 pub mod listing;
 pub mod not_found;

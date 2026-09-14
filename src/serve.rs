@@ -13,7 +13,7 @@ use hyper::{Method, Request, Response, StatusCode};
 use crate::body::{self, Body};
 use crate::config::Config;
 use crate::logging;
-use crate::pages::{listing, not_found::NotFound};
+use crate::pages::{document::Document, listing, not_found::NotFound};
 use crate::{file, path};
 
 pub async fn handle(
@@ -61,12 +61,19 @@ async fn route(req: &Request<Incoming>, config: &Config) -> io::Result<Response<
   }
 
   // Clean URLs: `/about.html` is the same page as `/about`, so send visitors
-  // to the canonical one instead of serving both.
-  if !config.ext && url_path.ends_with(".html") && is_file(&target).await {
-    return Ok(redirect(req, strip_html(url_path)));
+  // to the canonical one instead of serving both. With `-m` a document has the
+  // same claim to one address as a page does.
+  if !config.ext
+    && let Some(ext) = page_suffix(url_path, config)
+    && is_file(&target).await
+  {
+    return Ok(redirect(req, strip_suffix(url_path, ext)));
   }
 
   if is_file(&target).await {
+    if config.markdown && is_markdown(&target) {
+      return document(&target, url_path, config, req).await;
+    }
     return file::send(&target, req, StatusCode::OK).await;
   }
 
@@ -79,14 +86,30 @@ async fn route(req: &Request<Incoming>, config: &Config) -> io::Result<Response<
     if is_file(&index).await {
       return file::send(&index, req, StatusCode::OK).await;
     }
+    // A folder that carries its own document shows it rather than a file list —
+    // pointing serv at a project should open its README, the way a repository does.
+    if config.markdown {
+      for name in ["index.md", "README.md"] {
+        let doc = target.join(name);
+        if is_file(&doc).await {
+          return document(&doc, url_path, config, req).await;
+        }
+      }
+    }
     let index = listing::read(&target, url_path, &config.root).await?;
     return Ok(html(StatusCode::OK, req.method(), index.render()));
   }
 
   if !config.ext {
-    let candidate = with_html_suffix(&target);
+    let candidate = with_suffix(&target, ".html");
     if is_file(&candidate).await {
       return file::send(&candidate, req, StatusCode::OK).await;
+    }
+    if config.markdown {
+      let candidate = with_suffix(&target, ".md");
+      if is_file(&candidate).await {
+        return document(&candidate, url_path, config, req).await;
+      }
     }
   }
 
@@ -123,8 +146,20 @@ fn last_segment(url_path: &str) -> &str {
   url_path.rsplit('/').next().unwrap_or("")
 }
 
-fn strip_html(url_path: &str) -> String {
-  let stem = url_path.trim_end_matches(".html");
+/// The extension this URL would be redirected out of, if any. `.md` counts only
+/// when serv is rendering markdown; otherwise it is an ordinary file to hand over.
+fn page_suffix(url_path: &str, config: &Config) -> Option<&'static str> {
+  if url_path.ends_with(".html") {
+    Some(".html")
+  } else if config.markdown && url_path.ends_with(".md") {
+    Some(".md")
+  } else {
+    None
+  }
+}
+
+fn strip_suffix(url_path: &str, ext: &str) -> String {
+  let stem = url_path.strip_suffix(ext).unwrap_or(url_path);
   match stem.rsplit_once('/') {
     // `/docs/index.html` is `/docs/`, and `/index.html` is `/`.
     Some((parent, "index")) => format!("{parent}/"),
@@ -132,10 +167,34 @@ fn strip_html(url_path: &str) -> String {
   }
 }
 
-fn with_html_suffix(path: &std::path::Path) -> PathBuf {
+fn with_suffix(path: &std::path::Path, ext: &str) -> PathBuf {
   let mut name = OsString::from(path);
-  name.push(".html");
+  name.push(ext);
   PathBuf::from(name)
+}
+
+fn is_markdown(path: &std::path::Path) -> bool {
+  path
+    .extension()
+    .is_some_and(|ext| ext.eq_ignore_ascii_case("md"))
+}
+
+/// Read a markdown file and set it on serv's own sheet. Like every other file
+/// serv hands out, it is read fresh — editing it shows up on the next reload.
+async fn document(
+  path: &std::path::Path,
+  url_path: &str,
+  config: &Config,
+  req: &Request<Incoming>,
+) -> io::Result<Response<Body>> {
+  let source = tokio::fs::read_to_string(path).await?;
+  let name = path
+    .file_name()
+    .map(|n| n.to_string_lossy().into_owned())
+    .unwrap_or_default();
+  let page = Document::new(&source, &name, url_path, &config.root);
+
+  Ok(html(StatusCode::OK, req.method(), page.render()))
 }
 
 async fn is_file(path: &std::path::Path) -> bool {
@@ -750,19 +809,26 @@ mod tests {
 
   #[test]
   fn strips_the_extension_and_folds_an_index_into_its_directory() {
-    assert_eq!(strip_html("/about.html"), "/about");
-    assert_eq!(strip_html("/docs/guide.html"), "/docs/guide");
-    assert_eq!(strip_html("/index.html"), "/");
-    assert_eq!(strip_html("/docs/index.html"), "/docs/");
-    assert_eq!(strip_html("/a/b/index.html"), "/a/b/");
+    assert_eq!(strip_suffix("/about.html", ".html"), "/about");
+    assert_eq!(strip_suffix("/docs/guide.html", ".html"), "/docs/guide");
+    assert_eq!(strip_suffix("/index.html", ".html"), "/");
+    assert_eq!(strip_suffix("/docs/index.html", ".html"), "/docs/");
+    assert_eq!(strip_suffix("/a/b/index.html", ".html"), "/a/b/");
   }
 
   #[test]
-  fn stripping_the_extension_is_greedy() {
-    // Current behaviour: `trim_end_matches` removes every trailing `.html`, so
-    // a file genuinely called `page.html.html` would be redirected to `/page`
-    // rather than `/page.html`. Only reachable by naming a file that way.
-    assert_eq!(strip_html("/page.html.html"), "/page");
+  fn strips_a_markdown_extension_the_same_way() {
+    assert_eq!(strip_suffix("/about.md", ".md"), "/about");
+    assert_eq!(strip_suffix("/docs/index.md", ".md"), "/docs/");
+    assert_eq!(strip_suffix("/index.md", ".md"), "/");
+  }
+
+  #[test]
+  fn stripping_the_extension_removes_exactly_one() {
+    // `strip_suffix` where this used to be a `trim_end_matches`, which removed
+    // every trailing `.html` and sent `page.html.html` to `/page`.
+    assert_eq!(strip_suffix("/page.html.html", ".html"), "/page.html");
+    assert_eq!(strip_suffix("/notes.md.md", ".md"), "/notes.md");
   }
 
   #[test]
@@ -774,14 +840,18 @@ mod tests {
   }
 
   #[test]
-  fn the_html_suffix_is_appended_not_substituted() {
+  fn the_suffix_is_appended_not_substituted() {
     assert_eq!(
-      with_html_suffix(std::path::Path::new("/srv/about")),
+      with_suffix(std::path::Path::new("/srv/about"), ".html"),
       PathBuf::from("/srv/about.html")
     );
     assert_eq!(
-      with_html_suffix(std::path::Path::new("/srv/a.b")),
+      with_suffix(std::path::Path::new("/srv/a.b"), ".html"),
       PathBuf::from("/srv/a.b.html")
+    );
+    assert_eq!(
+      with_suffix(std::path::Path::new("/srv/about"), ".md"),
+      PathBuf::from("/srv/about.md")
     );
   }
 
@@ -796,5 +866,212 @@ mod tests {
     assert!(is_dir(&site.path().join("docs")).await);
     assert!(!is_dir(&site.path().join("a.txt")).await);
     assert!(!is_dir(&site.path().join("nope")).await);
+  }
+}
+
+#[cfg(test)]
+mod markdown_tests {
+  use crate::testkit::{Req, Site};
+
+  const DOC: &str = "# Reading\n\nsome prose\n";
+
+  fn site() -> Site {
+    Site::new().markdown()
+  }
+
+  // ---- rendering --------------------------------------------------------
+
+  #[tokio::test]
+  async fn renders_a_markdown_file_as_a_page() {
+    let reply = site().file("about.md", DOC).get("/about").await;
+
+    assert_eq!(reply.status, 200);
+    assert_eq!(
+      reply.header("content-type"),
+      Some("text/html; charset=utf-8")
+    );
+    assert!(reply.text().contains("<h1 id=\"reading\">Reading</h1>"));
+    assert!(reply.text().contains("<p>some prose</p>"));
+  }
+
+  #[tokio::test]
+  async fn without_the_flag_markdown_is_served_as_it_is_on_disk() {
+    let reply = Site::new().file("about.md", DOC).get("/about.md").await;
+
+    assert_eq!(reply.status, 200);
+    assert_eq!(
+      reply.header("content-type"),
+      Some("text/markdown; charset=utf-8")
+    );
+    assert_eq!(reply.text(), DOC);
+  }
+
+  #[tokio::test]
+  async fn without_the_flag_a_clean_url_does_not_find_markdown() {
+    assert_eq!(
+      Site::new().file("about.md", DOC).get("/about").await.status,
+      404
+    );
+  }
+
+  // ---- one address per page ---------------------------------------------
+
+  #[tokio::test]
+  async fn redirects_the_extension_to_the_clean_url() {
+    let reply = site().file("about.md", DOC).get("/about.md").await;
+
+    assert_eq!(reply.status, 301);
+    assert_eq!(reply.header("location"), Some("/about"));
+  }
+
+  #[tokio::test]
+  async fn a_nested_index_redirects_to_its_directory() {
+    let reply = site()
+      .file("docs/index.md", DOC)
+      .get("/docs/index.md")
+      .await;
+
+    assert_eq!(reply.status, 301);
+    assert_eq!(reply.header("location"), Some("/docs/"));
+  }
+
+  #[tokio::test]
+  async fn the_root_index_redirects_to_the_root() {
+    let reply = site().file("index.md", DOC).get("/index.md").await;
+
+    assert_eq!(reply.status, 301);
+    assert_eq!(reply.header("location"), Some("/"));
+  }
+
+  #[tokio::test]
+  async fn a_redirect_keeps_the_query_string() {
+    let reply = site().file("about.md", DOC).get("/about.md?x=1").await;
+
+    assert_eq!(reply.header("location"), Some("/about?x=1"));
+  }
+
+  // ---- html wins --------------------------------------------------------
+
+  #[tokio::test]
+  async fn html_beats_markdown_at_the_same_clean_url() {
+    let reply = site()
+      .file("about.html", "<p>html</p>")
+      .file("about.md", DOC)
+      .get("/about")
+      .await;
+
+    assert_eq!(reply.text(), "<p>html</p>");
+  }
+
+  #[tokio::test]
+  async fn an_html_index_beats_a_markdown_one() {
+    let reply = site()
+      .file("docs/index.html", "<p>html</p>")
+      .file("docs/index.md", DOC)
+      .get("/docs/")
+      .await;
+
+    assert_eq!(reply.text(), "<p>html</p>");
+  }
+
+  // ---- a folder's own page ----------------------------------------------
+
+  #[tokio::test]
+  async fn a_folder_with_an_index_md_serves_it_instead_of_a_listing() {
+    let reply = site().file("docs/index.md", DOC).get("/docs/").await;
+
+    assert_eq!(reply.status, 200);
+    assert!(reply.text().contains("some prose"));
+    assert!(!reply.text().contains("Index of"));
+  }
+
+  #[tokio::test]
+  async fn a_folder_falls_back_to_its_readme() {
+    let reply = site().file("docs/README.md", DOC).get("/docs/").await;
+
+    assert_eq!(reply.status, 200);
+    assert!(reply.text().contains("some prose"));
+  }
+
+  #[tokio::test]
+  async fn an_index_md_beats_a_readme() {
+    let reply = site()
+      .file("docs/index.md", "# Index\n")
+      .file("docs/README.md", "# Readme\n")
+      .get("/docs/")
+      .await;
+
+    assert!(reply.text().contains("Index"), "{}", reply.text());
+    assert!(!reply.text().contains("Readme"));
+  }
+
+  #[tokio::test]
+  async fn a_folder_with_no_document_still_gets_its_listing() {
+    let reply = site().file("docs/note.txt", "x").get("/docs/").await;
+
+    assert!(reply.text().contains("Index of"), "{}", reply.text());
+  }
+
+  #[tokio::test]
+  async fn without_the_flag_a_readme_does_not_replace_the_listing() {
+    let reply = Site::new().file("docs/README.md", DOC).get("/docs/").await;
+
+    assert!(reply.text().contains("Index of"), "{}", reply.text());
+  }
+
+  // ---- alongside the other flags ----------------------------------------
+
+  #[tokio::test]
+  async fn ext_mode_serves_the_extension_and_still_renders() {
+    let site = Site::new().markdown().ext().file("about.md", DOC);
+    let reply = site.get("/about.md").await;
+
+    assert_eq!(reply.status, 200);
+    assert!(reply.text().contains("some prose"));
+  }
+
+  #[tokio::test]
+  async fn ext_mode_does_not_strip_the_extension() {
+    let site = Site::new().markdown().ext().file("about.md", DOC);
+
+    assert_eq!(site.get("/about").await.status, 404);
+  }
+
+  #[tokio::test]
+  async fn ext_mode_still_lets_a_folder_serve_its_readme() {
+    // The fallback is about which file a folder means, not about extensions.
+    let site = Site::new().markdown().ext().file("docs/README.md", DOC);
+
+    assert!(site.get("/docs/").await.text().contains("some prose"));
+  }
+
+  #[tokio::test]
+  async fn a_missing_document_is_still_a_404() {
+    let reply = site().file("about.md", DOC).get("/missing").await;
+
+    assert_eq!(reply.status, 404);
+  }
+
+  #[tokio::test]
+  async fn a_head_request_carries_no_body() {
+    let site = site().file("about.md", DOC);
+    let reply = site.send(Req::head("/about")).await;
+
+    assert_eq!(reply.status, 200);
+    assert!(reply.body.is_empty());
+    assert!(reply.content_length().is_some_and(|len| len > 0));
+  }
+
+  #[tokio::test]
+  async fn the_spa_shell_still_wins_for_an_unmatched_route() {
+    let site = Site::new()
+      .markdown()
+      .spa("app.html")
+      .file("app.html", "<p>shell</p>")
+      .file("about.md", DOC);
+
+    assert_eq!(site.get("/some/route").await.text(), "<p>shell</p>");
+    // A document that exists is still the document, not the shell.
+    assert!(site.get("/about").await.text().contains("some prose"));
   }
 }

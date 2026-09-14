@@ -93,7 +93,7 @@ pub async fn read(dir: &Path, url_path: &str, root: &Path) -> io::Result<Listing
   })
 }
 
-fn crumbs(url_path: &str) -> Vec<Crumb> {
+pub fn crumbs(url_path: &str) -> Vec<Crumb> {
   let mut crumbs = vec![Crumb {
     label: "/".to_string(),
     href: "/".to_string(),

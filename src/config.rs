@@ -11,4 +11,6 @@ pub struct Config {
   pub ext: bool,
   /// Page to serve for a miss, when `--not-found` is in play.
   pub not_found: Option<PathBuf>,
+  /// Render `.md` files as pages, when `--markdown` is in play.
+  pub markdown: bool,
 }

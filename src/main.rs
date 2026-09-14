@@ -5,6 +5,7 @@ mod compress;
 mod config;
 mod file;
 mod logging;
+mod markdown;
 mod pages;
 mod path;
 mod serve;
@@ -51,6 +52,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     spa: args.spa.map(|p| root.join(p)),
     not_found: args.not_found.map(|p| root.join(p)),
     ext: args.ext,
+    markdown: args.markdown,
     root,
   });
 

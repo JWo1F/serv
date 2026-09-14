@@ -47,6 +47,10 @@ pub struct Args {
   #[arg(short = 'e', long)]
   pub ext: bool,
 
+  /// Render markdown files as pages in the browser
+  #[arg(short = 'm', long)]
+  pub markdown: bool,
+
   /// Page to serve when nothing matches
   #[arg(short = 'n', long = "not-found", value_name = "FILE")]
   pub not_found: Option<PathBuf>,

@@ -348,16 +348,18 @@ mod tests {
     let dir = tempfile::tempdir().unwrap();
     fs::write(dir.path().join("index.html"), "hi").unwrap();
 
-    for (spa, not_found, ext, quiet) in [
-      (None, None, false, false),
-      (Some("index.html"), Some("404.html"), true, true),
-      (Some("gone.html"), Some("gone.html"), false, true),
+    for (spa, not_found, ext, markdown, quiet) in [
+      (None, None, false, false, false),
+      (Some("index.html"), Some("404.html"), true, false, true),
+      (Some("gone.html"), Some("gone.html"), false, true, true),
+      (None, None, false, true, false),
     ] {
       let config = Config {
         root: dir.path().to_path_buf(),
         spa: spa.map(|p| dir.path().join(p)),
         not_found: not_found.map(|p| dir.path().join(p)),
         ext,
+        markdown,
       };
       print(&config, "127.0.0.1:8010".parse().unwrap(), quiet);
     }

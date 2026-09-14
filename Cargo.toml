@@ -29,11 +29,24 @@ hyper-util = { version = "0.1.20", default-features = false, features = ["tokio"
 log = "0.4.34"
 mime_guess = "2.0.5"
 percent-encoding = "2.3.2"
+pulldown-cmark = { version = "0.13.4", default-features = false, features = ["html"] }
+syntect = { version = "5.3.0", default-features = false, features = [
+  "parsing",
+  "default-syntaxes",
+  "regex-fancy",
+  "html",
+], optional = true }
 tokio = { version = "1.53.1", features = ["rt-multi-thread", "net", "fs", "io-util", "macros"] }
 tokio-util = { version = "0.7.19", features = ["io"] }
 
 [dev-dependencies]
 tempfile = "3"
+
+[features]
+# Server-side syntax highlighting for fenced code blocks. Off by default:
+# syntect carries a grammar dump and a regex engine, several times the size of
+# serv itself. Without it a code block is plain monospace.
+highlight = ["dep:syntect"]
 
 [profile.release]
 opt-level = 3

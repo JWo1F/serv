@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <link rel="icon" href={crate::pages::FAVICON}/>
+    <title>{self.title}</title>
+    <style>{@html self.style()}</style>
+  </head>
+  <body>
+    <main class="sheet">
+      <header class="slug ink">
+        <span><b>serv</b> · local development server</span>
+        <span class="mark">markdown</span>
+      </header>
+      <div class="rule ink"></div>
+
+      <nav class="title ink">
+        <span class="path">{#for crumb in &self.crumbs}<a href={crumb.href.as_str()}>{crumb.label}</a>{/for}</span>
+      </nav>
+
+      <article class="prose ink">{@html self.body}</article>
+
+      <footer class="colophon ink">
+        <span class="tag">serv {env!("CARGO_PKG_VERSION")}</span>
+        <span class="where">{self.root}</span>
+      </footer>
+    </main>
+  </body>
+</html>
