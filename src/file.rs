@@ -186,6 +186,10 @@ fn parse_range(header: &str, len: u64) -> Range {
   let Some(spec) = header.strip_prefix("bytes=") else {
     return Range::Whole;
   };
+  // An empty file has no last byte, and every arm below reaches for `len - 1`.
+  if len == 0 {
+    return Range::Unsatisfiable;
+  }
   if spec.contains(',') {
     return Range::Whole;
   }
@@ -209,7 +213,7 @@ fn parse_range(header: &str, len: u64) -> Range {
     },
   };
 
-  if len == 0 || start > end || start >= len {
+  if start > end || start >= len {
     Range::Unsatisfiable
   } else {
     Range::Partial(start, end)
@@ -799,17 +803,25 @@ mod tests {
   }
 
   #[test]
-  #[ignore = "known bug: `len - 1` underflows for a zero-length file; see the \
-              test body"]
   fn a_range_over_an_empty_file_is_unsatisfiable() {
-    // Every arm of `parse_range` computes `len - 1`, which underflows when the
-    // file is empty. A debug build panics and the connection dies; a release
-    // build wraps to u64::MAX and the `len == 0` guard below catches it, so
-    // this is the answer only half the time. Reachable over HTTP with a `Range`
-    // header against any zero-byte file.
+    // There is no byte to hand back, so every spelling of a range over an empty
+    // file is unsatisfiable — and `len - 1` must not be reached to say so.
     assert_eq!(parse_range("bytes=0-", 0), Range::Unsatisfiable);
     assert_eq!(parse_range("bytes=-5", 0), Range::Unsatisfiable);
     assert_eq!(parse_range("bytes=0-5", 0), Range::Unsatisfiable);
+  }
+
+  #[tokio::test]
+  async fn a_range_request_for_an_empty_file_is_refused_not_fatal() {
+    // The underflow was reachable from the wire, so the guard is pinned there
+    // too: a debug build used to panic the connection task outright.
+    let site = Site::new().file("empty.bin", "");
+    let reply = site
+      .send(Req::get("/empty.bin").header("Range", "bytes=0-"))
+      .await;
+
+    assert_eq!(reply.status, 416);
+    assert_eq!(reply.header("content-range"), Some("bytes */0"));
   }
 
   #[test]
