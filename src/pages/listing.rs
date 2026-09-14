@@ -107,12 +107,23 @@ pub fn crumbs(url_path: &str, root: &Path) -> Vec<Crumb> {
     href: "/".to_string(),
   }];
   let mut href = String::from("/");
+  // A path that does not end in a slash names a file, and its last segment is
+  // that file rather than a folder to descend into.
+  let names_a_file = !url_path.ends_with('/');
+  let mut segments = url_path.split('/').filter(|s| !s.is_empty()).peekable();
 
-  for segment in url_path.split('/').filter(|s| !s.is_empty()) {
+  while let Some(segment) = segments.next() {
+    let last = segments.peek().is_none();
     href.push_str(segment);
-    href.push('/');
+    if !(last && names_a_file) {
+      href.push('/');
+    }
     crumbs.push(Crumb {
-      label: format!("{segment}/"),
+      label: if last && names_a_file {
+        segment.to_string()
+      } else {
+        format!("{segment}/")
+      },
       href: href.clone(),
     });
   }
@@ -378,6 +389,26 @@ mod tests {
         ("a/", "/a/"),
         ("b/", "/a/b/"),
         ("c/", "/a/b/c/"),
+      ]
+    );
+  }
+
+  #[test]
+  fn a_path_that_names_a_file_ends_the_trail_on_the_file() {
+    // A document is not a directory: its crumb must not wear a trailing slash,
+    // or it links to an address the page does not live at.
+    let built = crumbs("/docs/guide", Path::new("/home/alex/site"));
+    let trail: Vec<(&str, &str)> = built
+      .iter()
+      .map(|c| (c.label.as_str(), c.href.as_str()))
+      .collect();
+
+    assert_eq!(
+      trail,
+      [
+        ("site/", "/"),
+        ("docs/", "/docs/"),
+        ("guide", "/docs/guide")
       ]
     );
   }
