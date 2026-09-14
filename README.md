@@ -149,9 +149,6 @@ finds a changed file gets the whole thing rather than a corrupt splice.
 **Compression.** Text responses between 1 KiB and 8 MiB are gzipped on the fly,
 and `q=0` is honoured as the refusal it is. Larger files keep their streaming
 path and their range support. Media, archives and images are sent as they are.
-Brotli is deliberately absent: it carries a static dictionary and Huffman tables
-worth about a megabyte of binary — roughly half of serv — to save bytes on a
-connection that never leaves the machine.
 
 **Large files stream.** A response is read from disk in chunks as it is written
 to the socket, so serving a 2 GB video costs a buffer, not 2 GB of memory.
