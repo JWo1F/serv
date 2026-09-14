@@ -31,6 +31,11 @@ jobs:
       - run: cargo clippy --all-targets --locked -- -D warnings
       - run: cargo test --locked
 
+      # `highlight` is off by default, so nothing above compiles the syntect
+      # path. Without these two it would rot unnoticed.
+      - run: cargo clippy --all-targets --locked --features highlight -- -D warnings
+      - run: cargo test --locked --features highlight
+
   build:
     name: build · ${{ matrix.os }}
     runs-on: ${{ matrix.os }}

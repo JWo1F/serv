@@ -80,6 +80,7 @@ serv [OPTIONS] [DIR]
 | `-p`, `--port <PORT>` | Port to listen on. Default `8010`. |
 | `-s`, `--spa [<FILE>]` | Serve a single-page app: unmatched routes fall back to `FILE`, which defaults to `index.html`. |
 | `-e`, `--ext` | Require the `.html` extension in URLs instead of stripping it. |
+| `-m`, `--markdown` | Render `.md` files as pages instead of handing them over as text. |
 | `-n`, `--not-found <FILE>` | Page to serve for a miss, instead of serv's own. |
 | `-q`, `--quiet` | Do not log requests. |
 | `--help` | Print help. |
@@ -95,6 +96,7 @@ serv -s                   # a single-page app falling back to index.html
 serv -s app.html -q       # a different shell, and no request logs
 serv -n 404.html          # your own not-found page
 serv -e                   # URLs keep their .html
+serv -m ./docs            # read a folder of markdown in the browser
 ```
 
 ## How it serves
@@ -113,6 +115,18 @@ relative links inside the page resolve.
 with the app shell — but only for navigations. A request for a missing script or
 stylesheet stays a 404 instead of becoming HTML with the wrong content type,
 which is the failure mode that costs an afternoon.
+
+**Markdown, with `-m`.** A `.md` file becomes a page rather than a download:
+`/about` serves `about.md`, and `/about.md` redirects to `/about` so a document
+gets the same single address a page does. A folder with no `index.html` shows
+its `index.md`, or failing that its `README.md`, instead of a file listing — so
+pointing serv at a project opens the project. HTML wins every collision, and
+without the flag a `.md` file is served exactly as it is on disk. GitHub's
+extensions are all on: tables, task lists, footnotes, strikethrough. Front
+matter is dropped rather than printed, and every heading gets an anchor so the
+`#links` in a README land. Fenced code is set in plain monospace unless serv was
+built with `--features highlight`, which compiles in syntect for real grammars
+and costs several megabytes of binary to do it.
 
 **Nothing is cached in the server.** Every request reads the file from disk, so
 what you just saved is what gets sent. The one cache serv takes part in is the
