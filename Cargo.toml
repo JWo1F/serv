@@ -32,6 +32,9 @@ percent-encoding = "2.3.2"
 tokio = { version = "1.53.1", features = ["rt-multi-thread", "net", "fs", "io-util", "macros"] }
 tokio-util = { version = "0.7.19", features = ["io"] }
 
+[dev-dependencies]
+tempfile = "3"
+
 [profile.release]
 opt-level = 3
 lto = "fat"
