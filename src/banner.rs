@@ -204,3 +204,162 @@ impl Paint {
     style::paint(self.on, code, text)
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use std::fs;
+  use std::path::PathBuf;
+
+  fn plain() -> Paint {
+    Paint { on: false }
+  }
+
+  #[test]
+  fn one_of_a_thing_is_singular() {
+    assert_eq!(plural(1, "folder"), "folder");
+    assert_eq!(plural(0, "folder"), "folders");
+    assert_eq!(plural(2, "file"), "files");
+  }
+
+  #[test]
+  fn counts_the_top_level_of_the_served_folder() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::create_dir(dir.path().join("assets")).unwrap();
+    fs::create_dir(dir.path().join("docs")).unwrap();
+    fs::write(dir.path().join("index.html"), vec![b'x'; 100]).unwrap();
+    fs::write(dir.path().join("app.css"), vec![b'y'; 24]).unwrap();
+    // One shallow read, so a file nested inside a folder is not counted.
+    fs::write(dir.path().join("docs").join("deep.txt"), vec![b'z'; 999]).unwrap();
+
+    assert_eq!(count(dir.path()), (2, 2, 124));
+  }
+
+  #[test]
+  fn an_empty_folder_counts_to_nothing() {
+    let dir = tempfile::tempdir().unwrap();
+    assert_eq!(count(dir.path()), (0, 0, 0));
+  }
+
+  #[test]
+  fn a_folder_that_cannot_be_read_counts_to_nothing() {
+    let dir = tempfile::tempdir().unwrap();
+    assert_eq!(count(&dir.path().join("missing")), (0, 0, 0));
+  }
+
+  #[test]
+  fn a_file_that_exists_is_named_in_green() {
+    let dir = tempfile::tempdir().unwrap();
+    let page = dir.path().join("404.html");
+    fs::write(&page, "x").unwrap();
+
+    assert_eq!(present(&plain(), &page, "missing"), "404.html");
+  }
+
+  #[test]
+  fn a_file_that_does_not_exist_says_so() {
+    let dir = tempfile::tempdir().unwrap();
+    let page = dir.path().join("404.html");
+
+    assert_eq!(present(&plain(), &page, "missing"), "404.html · missing");
+  }
+
+  #[test]
+  fn shortens_a_path_under_home() {
+    // `tilde` reads $HOME, so the expectation is built from it rather than
+    // assumed — and the no-HOME case is left to the machine that has none.
+    let Some(home) = std::env::var_os("HOME").filter(|h| !h.is_empty()) else {
+      return;
+    };
+    let home = home.to_string_lossy().into_owned();
+
+    assert_eq!(tilde(Path::new(&home)), "~");
+    assert_eq!(tilde(&PathBuf::from(&home).join("site")), "~/site");
+    assert_eq!(
+      tilde(&PathBuf::from(&home).join("work/serv")),
+      "~/work/serv"
+    );
+  }
+
+  #[test]
+  fn leaves_a_path_outside_home_alone() {
+    assert_eq!(tilde(Path::new("/etc")), "/etc");
+    assert_eq!(tilde(Path::new("/")), "/");
+  }
+
+  #[test]
+  fn does_not_shorten_a_sibling_of_home() {
+    // `/home/alexandra` starts with `/home/alex` as a string but is a different
+    // directory, so only a whole path component may be replaced.
+    let Some(home) = std::env::var_os("HOME").filter(|h| !h.is_empty()) else {
+      return;
+    };
+    let sibling = format!("{}-backup", home.to_string_lossy());
+
+    assert_eq!(tilde(Path::new(&sibling)), sibling);
+  }
+
+  #[test]
+  fn the_address_is_boxed_to_the_width_of_the_url() {
+    let mut out = String::new();
+    frame(&mut out, &plain(), "http://127.0.0.1:8010/");
+
+    let lines: Vec<&str> = out.lines().filter(|l| !l.trim().is_empty()).collect();
+    assert_eq!(lines.len(), 3);
+    assert!(lines[1].contains("http://127.0.0.1:8010/"));
+    // Every line of the box is the same width, which is what makes it a box.
+    let widths: Vec<usize> = lines.iter().map(|l| l.chars().count()).collect();
+    assert_eq!(widths[0], widths[1]);
+    assert_eq!(widths[1], widths[2]);
+  }
+
+  #[test]
+  fn the_box_is_measured_in_characters_not_bytes() {
+    // A unicode host would otherwise draw a box wider than its contents.
+    let mut out = String::new();
+    frame(&mut out, &plain(), "http://привет:8010/");
+
+    let lines: Vec<usize> = out
+      .lines()
+      .filter(|l| !l.trim().is_empty())
+      .map(|l| l.chars().count())
+      .collect();
+    assert_eq!(lines[0], lines[1]);
+    assert_eq!(lines[1], lines[2]);
+  }
+
+  #[test]
+  fn a_row_pads_its_label_to_a_fixed_column() {
+    let mut out = String::new();
+    row(&mut out, &plain(), "root", "~/site");
+    row(&mut out, &plain(), "not found", "built-in page");
+
+    let lines: Vec<&str> = out.lines().collect();
+    assert_eq!(lines[0], "  root         ~/site");
+    assert_eq!(lines[1], "  not found    built-in page");
+    // The values start in the same column, which is the point of the padding.
+    assert_eq!(lines[0].find("~/site"), lines[1].find("built-in page"));
+  }
+
+  #[test]
+  fn printing_the_banner_does_not_panic() {
+    // The whole block, over a real directory: the only way to reach `print` is
+    // to call it, and a panic here would kill startup before the first request.
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(dir.path().join("index.html"), "hi").unwrap();
+
+    for (spa, not_found, ext, quiet) in [
+      (None, None, false, false),
+      (Some("index.html"), Some("404.html"), true, true),
+      (Some("gone.html"), Some("gone.html"), false, true),
+    ] {
+      let config = Config {
+        root: dir.path().to_path_buf(),
+        spa: spa.map(|p| dir.path().join(p)),
+        not_found: not_found.map(|p| dir.path().join(p)),
+        ext,
+      };
+      print(&config, "127.0.0.1:8010".parse().unwrap(), quiet);
+    }
+  }
+}

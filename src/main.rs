@@ -73,3 +73,37 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn resolves_a_literal_address() {
+    let addr = resolve_addr("127.0.0.1", 8010).unwrap();
+
+    assert_eq!(addr.to_string(), "127.0.0.1:8010");
+  }
+
+  #[test]
+  fn resolves_the_wildcard_address() {
+    assert_eq!(resolve_addr("0.0.0.0", 3000).unwrap().port(), 3000);
+  }
+
+  #[test]
+  fn resolves_a_name() {
+    // `localhost` comes out of the hosts file, so this needs no network; which
+    // family it resolves to is the machine's business, not serv's.
+    let addr = resolve_addr("localhost", 8010).unwrap();
+
+    assert!(addr.ip().is_loopback());
+    assert_eq!(addr.port(), 8010);
+  }
+
+  #[test]
+  fn refuses_a_host_that_is_not_an_address() {
+    // A bracketed IPv6 literal is not what `(host, port)` expects — the host
+    // half is a bare address or a name, so this fails without a lookup.
+    assert!(resolve_addr("[::1]", 8010).is_err());
+  }
+}
