@@ -70,12 +70,12 @@ git clone https://github.com/JWo1F/serv && cd serv && cargo install --path .
 ## Usage
 
 ```
-serv [OPTIONS] [DIR]
+serv [OPTIONS] [PATH]
 ```
 
 | Option | Meaning |
 | --- | --- |
-| `DIR` | Folder to serve. Defaults to the current directory. |
+| `PATH` | Folder to serve, or a single file to serve at `/`. Defaults to the current directory. |
 | `-h`, `--host <HOST>` | Address to listen on. Default `127.0.0.1`. Names such as `localhost` are resolved. |
 | `-p`, `--port <PORT>` | Port to listen on. Default `8010`. |
 | `-s`, `--spa [<FILE>]` | Serve a single-page app: unmatched routes fall back to `FILE`, which defaults to `index.html`. |
@@ -97,6 +97,7 @@ serv -s app.html -q       # a different shell, and no request logs
 serv -n 404.html          # your own not-found page
 serv -e                   # URLs keep their .html
 serv -m ./docs            # read a folder of markdown in the browser
+serv -m README.md         # read one file, served at / and nowhere else
 ```
 
 ## How it serves
@@ -105,6 +106,15 @@ serv -m ./docs            # read a folder of markdown in the browser
 redirects to `/about` so a page has one address rather than two. `/docs/`
 serves `docs/index.html`. Pass `-e` to turn all of that off and serve paths
 exactly as written.
+
+**A single file.** Point serv at a file rather than a folder and it serves
+that file at `/`, and nothing else — every other path, including the file's own
+name, gets the not-found page. Nothing around it is exposed: the folder it sits
+in is never listed and its neighbours are never served. `-m` still decides
+whether a `.md` file is rendered as a page or handed over as text, so
+`serv -m NOTES.md` reads a document in the browser while `serv NOTES.md` hands
+over the markdown. `-s` and `-n` both name a file inside a served folder, so
+serv refuses them here instead of ignoring them.
 
 **Directories.** A folder with an `index.html` serves it. A folder without one
 gets a browsable index — every entry with its type, size and date, and folders

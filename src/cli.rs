@@ -14,11 +14,12 @@ use clap::{ArgAction, Parser};
         serv ./dist -p 8080           serve ./dist on port 8080\n  \
         serv -h 0.0.0.0 -p 1234       listen on every interface\n  \
         serv -s                       single-page app, falling back to index.html\n  \
-        serv -s app.html -q           single-page app, no request logs"
+        serv -s app.html -q           single-page app, no request logs\n  \
+        serv -m README.md             one file, served at / and nowhere else"
 )]
 pub struct Args {
-  /// Directory to serve
-  #[arg(value_name = "DIR", default_value = ".")]
+  /// Directory to serve, or a single file to serve at `/`
+  #[arg(value_name = "PATH", default_value = ".")]
   pub dir: PathBuf,
 
   /// Address to listen on

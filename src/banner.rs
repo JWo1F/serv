@@ -37,56 +37,12 @@ pub fn print(config: &Config, addr: SocketAddr, quiet: bool) {
 
   frame(&mut out, &paint, &url);
 
-  let (folders, files, bytes) = count(&config.root);
-  row(&mut out, &paint, "root", &tilde(&config.root));
-  row(
-    &mut out,
-    &paint,
-    "contents",
-    &format!(
-      "{folders} {} {} {files} {} {} {}",
-      plural(folders, "folder"),
-      paint.on(DIM, "·"),
-      plural(files, "file"),
-      paint.on(DIM, "·"),
-      human_size(bytes),
-    ),
-  );
-
-  match &config.spa {
-    Some(spa) => row(&mut out, &paint, "spa", &present(&paint, spa, "missing")),
-    None => {
-      let index = config.root.join("index.html");
-      let value = if index.is_file() {
-        paint.on(GREEN, "index.html")
-      } else {
-        format!(
-          "no index.html {}",
-          paint.on(DIM, "· folders get a generated listing")
-        )
-      };
-      row(&mut out, &paint, "index", &value);
-    }
+  match &config.only {
+    Some(file) => one_file(&mut out, &paint, file),
+    None => folder(&mut out, &paint, config),
   }
 
-  let not_found = match &config.not_found {
-    Some(page) => present(&paint, page, "missing, falling back to the built-in page"),
-    None => paint.on(DIM, "built-in page"),
-  };
-  row(&mut out, &paint, "not found", &not_found);
-
-  let urls = if config.ext {
-    format!("{} {}", "literal", paint.on(DIM, "· /about.html only"))
-  } else {
-    format!(
-      "{} {}",
-      "clean",
-      paint.on(DIM, "· /about serves about.html")
-    )
-  };
-  row(&mut out, &paint, "urls", &urls);
-
-  if let Some(value) = markdown(&paint, config.markdown) {
+  if let Some(value) = markdown(&paint, config.markdown, config.only.is_some()) {
     row(&mut out, &paint, "markdown", &value);
   }
 
@@ -107,9 +63,86 @@ pub fn print(config: &Config, addr: SocketAddr, quiet: bool) {
   print!("{out}");
 }
 
+/// The rows for a served directory: what is in it, which page `/` lands on,
+/// where a miss goes, and whether `/about` will find `about.html`.
+fn folder(out: &mut String, paint: &Paint, config: &Config) {
+  let (folders, files, bytes) = count(&config.root);
+  row(out, paint, "root", &tilde(&config.root));
+  row(
+    out,
+    paint,
+    "contents",
+    &format!(
+      "{folders} {} {} {files} {} {} {}",
+      plural(folders, "folder"),
+      paint.on(DIM, "·"),
+      plural(files, "file"),
+      paint.on(DIM, "·"),
+      human_size(bytes),
+    ),
+  );
+
+  match &config.spa {
+    Some(spa) => row(out, paint, "spa", &present(paint, spa, "missing")),
+    None => {
+      let index = config.root.join("index.html");
+      let value = if index.is_file() {
+        paint.on(GREEN, "index.html")
+      } else {
+        format!(
+          "no index.html {}",
+          paint.on(DIM, "· folders get a generated listing")
+        )
+      };
+      row(out, paint, "index", &value);
+    }
+  }
+
+  let not_found = match &config.not_found {
+    Some(page) => present(paint, page, "missing, falling back to the built-in page"),
+    None => paint.on(DIM, "built-in page"),
+  };
+  row(out, paint, "not found", &not_found);
+
+  let urls = if config.ext {
+    format!("{} {}", "literal", paint.on(DIM, "· /about.html only"))
+  } else {
+    format!(
+      "{} {}",
+      "clean",
+      paint.on(DIM, "· /about serves about.html")
+    )
+  };
+  row(out, paint, "urls", &urls);
+}
+
+/// The rows for a single served file. No contents, no index and no clean-URL
+/// rule to report — there is one address, and the rest is a 404.
+fn one_file(out: &mut String, paint: &Paint, file: &Path) {
+  // An unreadable file leaves the size off rather than the row; `count` treats
+  // a folder it cannot read the same way.
+  let size = std::fs::metadata(file).map(|meta| meta.len()).ok();
+  let shown = match size {
+    Some(bytes) => format!(
+      "{} {} {}",
+      tilde(file),
+      paint.on(DIM, "·"),
+      human_size(bytes)
+    ),
+    None => tilde(file),
+  };
+  row(out, paint, "file", &shown);
+  row(
+    out,
+    paint,
+    "urls",
+    &format!("/ only {}", paint.on(DIM, "· everything else is a 404")),
+  );
+}
+
 /// What `-m` is doing, when it is doing anything. Silent otherwise: a row
 /// saying a feature is off is a row nobody asked for.
-fn markdown(paint: &Paint, on: bool) -> Option<String> {
+fn markdown(paint: &Paint, on: bool, one_file: bool) -> Option<String> {
   if !on {
     return None;
   }
@@ -118,13 +151,16 @@ fn markdown(paint: &Paint, on: bool) -> Option<String> {
   } else {
     "· code plain"
   };
+  // The folder fallbacks have nothing to fall back to when there is one file.
+  let note = if one_file {
+    code.to_string()
+  } else {
+    format!("· folders fall back to index.md, then README.md {code}")
+  };
   Some(format!(
     "{} {}",
     paint.on(GREEN, "rendered"),
-    paint.on(
-      DIM,
-      &format!("· folders fall back to index.md, then README.md {code}")
-    )
+    paint.on(DIM, &note)
   ))
 }
 
@@ -238,6 +274,40 @@ mod tests {
 
   fn plain() -> Paint {
     Paint { on: false }
+  }
+
+  #[test]
+  fn the_markdown_row_drops_the_folder_fallbacks_for_one_file() {
+    let folder = markdown(&plain(), true, false).unwrap();
+    let single = markdown(&plain(), true, true).unwrap();
+
+    assert!(folder.contains("README.md"), "{folder}");
+    assert!(!single.contains("README.md"), "{single}");
+    assert!(single.contains("rendered"), "{single}");
+  }
+
+  #[test]
+  fn the_file_rows_name_the_file_its_size_and_the_one_address() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("README.md");
+    fs::write(&file, vec![b'x'; 2048]).unwrap();
+
+    let mut out = String::new();
+    one_file(&mut out, &plain(), &file);
+
+    assert!(out.contains("README.md"), "{out}");
+    assert!(out.contains("2.0 KiB") || out.contains("2.0 kB"), "{out}");
+    assert!(out.contains("/ only"), "{out}");
+    assert!(out.contains("404"), "{out}");
+  }
+
+  #[test]
+  fn a_file_that_cannot_be_read_keeps_its_row() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut out = String::new();
+    one_file(&mut out, &plain(), &dir.path().join("gone.md"));
+
+    assert!(out.contains("gone.md"), "{out}");
   }
 
   #[test]
@@ -368,19 +438,19 @@ mod tests {
 
   #[test]
   fn markdown_is_only_mentioned_when_it_is_on() {
-    assert_eq!(markdown(&plain(), false), None);
+    assert_eq!(markdown(&plain(), false, false), None);
   }
 
   #[test]
   fn the_markdown_row_says_what_a_folder_will_do() {
-    let row = markdown(&plain(), true).expect("a row");
+    let row = markdown(&plain(), true, false).expect("a row");
     assert!(row.contains("index.md"), "{row}");
     assert!(row.contains("README.md"), "{row}");
   }
 
   #[test]
   fn the_markdown_row_says_whether_highlighting_is_built_in() {
-    let row = markdown(&plain(), true).expect("a row");
+    let row = markdown(&plain(), true, false).expect("a row");
     if cfg!(feature = "highlight") {
       assert!(row.contains("highlighted"), "{row}");
     } else {
@@ -403,12 +473,31 @@ mod tests {
     ] {
       let config = Config {
         root: dir.path().to_path_buf(),
+        only: None,
         spa: spa.map(|p| dir.path().join(p)),
         not_found: not_found.map(|p| dir.path().join(p)),
         ext,
         markdown,
       };
       print(&config, "127.0.0.1:8010".parse().unwrap(), quiet);
+    }
+  }
+
+  #[test]
+  fn printing_the_banner_for_one_file_does_not_panic() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(dir.path().join("README.md"), "# hi").unwrap();
+
+    for (name, markdown) in [("README.md", true), ("README.md", false), ("gone.md", true)] {
+      let config = Config {
+        root: dir.path().to_path_buf(),
+        only: Some(dir.path().join(name)),
+        spa: None,
+        not_found: None,
+        ext: false,
+        markdown,
+      };
+      print(&config, "127.0.0.1:8010".parse().unwrap(), false);
     }
   }
 }

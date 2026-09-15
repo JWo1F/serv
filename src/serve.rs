@@ -53,6 +53,20 @@ async fn route(req: &Request<Incoming>, config: &Config) -> io::Result<Response<
   }
 
   let url_path = req.uri().path();
+
+  // Pointed at one file, serv answers on `/` and nowhere else — including on
+  // the file's own name. There is no folder behind the address for anything
+  // else to resolve against, so everything else is a miss.
+  if let Some(file) = &config.only {
+    if url_path != "/" {
+      return not_found(req, config).await;
+    }
+    if config.markdown && is_markdown(file) {
+      return document(file, url_path, config, req).await;
+    }
+    return file::send(file, req, StatusCode::OK).await;
+  }
+
   let Some(target) = path::resolve(&config.root, url_path) else {
     return miss(req, config).await;
   };
@@ -268,6 +282,113 @@ mod tests {
 
   fn site() -> Site {
     Site::new()
+  }
+
+  // ---- one file ---------------------------------------------------------
+
+  #[tokio::test]
+  async fn one_file_is_served_at_the_root() {
+    let site = site().file("about.html", PAGE).only("about.html");
+    let reply = site.get("/").await;
+
+    assert_eq!(reply.status, 200);
+    assert_eq!(
+      reply.header("content-type"),
+      Some("text/html; charset=utf-8")
+    );
+    assert_eq!(reply.text(), PAGE);
+  }
+
+  #[tokio::test]
+  async fn the_file_s_own_name_is_not_an_address() {
+    // `/` is the only address there is, so the name it happens to have on disk
+    // is a miss like any other path.
+    let site = site().file("about.html", PAGE).only("about.html");
+
+    assert_eq!(site.get("/about.html").await.status, 404);
+    assert_eq!(site.get("/about").await.status, 404);
+  }
+
+  #[tokio::test]
+  async fn its_neighbours_are_not_served() {
+    let site = site()
+      .file("about.html", PAGE)
+      .file("app.css", "body{}")
+      .folder("docs")
+      .only("about.html");
+
+    assert_eq!(site.get("/app.css").await.status, 404);
+    assert_eq!(site.get("/docs/").await.status, 404);
+    assert_eq!(site.get("/docs").await.status, 404);
+  }
+
+  #[tokio::test]
+  async fn a_miss_gets_the_built_in_not_found_page() {
+    let site = site().file("about.html", PAGE).only("about.html");
+    let reply = site.get("/anything").await;
+
+    assert_eq!(reply.status, 404);
+    assert_eq!(
+      reply.header("content-type"),
+      Some("text/html; charset=utf-8")
+    );
+  }
+
+  #[tokio::test]
+  async fn one_markdown_file_is_rendered_with_m() {
+    let site = site()
+      .file("notes.md", "# Notes\n\nsome prose")
+      .only("notes.md")
+      .markdown();
+    let reply = site.get("/").await;
+
+    assert_eq!(reply.status, 200);
+    assert_eq!(
+      reply.header("content-type"),
+      Some("text/html; charset=utf-8")
+    );
+    assert!(
+      reply.text().contains("<title>Notes</title>"),
+      "{}",
+      reply.text()
+    );
+  }
+
+  #[tokio::test]
+  async fn one_markdown_file_is_handed_over_as_it_is_without_m() {
+    // `-m` keeps its meaning: without it a `.md` file is a file, not a page.
+    let site = site().file("notes.md", "# Notes").only("notes.md");
+    let reply = site.get("/").await;
+
+    assert_eq!(reply.status, 200);
+    assert_eq!(reply.text(), "# Notes");
+    assert!(!reply.text().contains("<h1"), "{}", reply.text());
+  }
+
+  #[tokio::test]
+  async fn a_head_of_the_one_file_is_a_head() {
+    let site = site().file("about.html", PAGE).only("about.html");
+    let reply = site.send(Req::head("/")).await;
+
+    assert_eq!(reply.status, 200);
+    assert!(reply.body.is_empty());
+    assert_eq!(reply.content_length(), Some(PAGE.len() as u64));
+  }
+
+  #[tokio::test]
+  async fn a_post_is_still_refused() {
+    let site = site().file("about.html", PAGE).only("about.html");
+    let reply = site.send(Req::new("POST", "/")).await;
+
+    assert_eq!(reply.status, 405);
+  }
+
+  #[tokio::test]
+  async fn a_traversal_attempt_is_a_plain_miss() {
+    let site = site().file("about.html", PAGE).only("about.html");
+
+    assert_eq!(site.get("/../../etc/passwd").await.status, 404);
+    assert_eq!(site.get("/%2e%2e%2fetc%2fpasswd").await.status, 404);
   }
 
   // ---- clean URLs -------------------------------------------------------

@@ -28,6 +28,7 @@ use crate::serve;
 /// from it.
 pub struct Site {
   dir: TempDir,
+  only: Option<PathBuf>,
   spa: Option<PathBuf>,
   not_found: Option<PathBuf>,
   ext: bool,
@@ -44,6 +45,7 @@ impl Site {
   pub fn new() -> Self {
     Self {
       dir: tempfile::tempdir().expect("temp dir"),
+      only: None,
       spa: None,
       not_found: None,
       ext: false,
@@ -67,6 +69,12 @@ impl Site {
 
   pub fn folder(self, rel: &str) -> Self {
     std::fs::create_dir_all(self.dir.path().join(rel)).expect("create dir");
+    self
+  }
+
+  /// `serv <file>`: one file served at `/`, with the temp dir as its root.
+  pub fn only(mut self, file: &str) -> Self {
+    self.only = Some(PathBuf::from(file));
     self
   }
 
@@ -100,6 +108,7 @@ impl Site {
     // directory lives under a symlinked `/var`.
     let root = self.dir.path().canonicalize().expect("canonical root");
     Arc::new(Config {
+      only: self.only.as_ref().map(|p| root.join(p)),
       spa: self.spa.as_ref().map(|p| root.join(p)),
       not_found: self.not_found.as_ref().map(|p| root.join(p)),
       ext: self.ext,
