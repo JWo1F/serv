@@ -67,6 +67,15 @@ Or build it yourself — Rust 1.88 or newer:
 git clone https://github.com/JWo1F/serv && cd serv && cargo install --path .
 ```
 
+**Syntax highlighting is a build option.** Every binary above — the Homebrew
+bottle and the release tarballs included — is built without it, because the
+grammars cost several megabytes. Building from source with the `highlight`
+feature turns it on:
+
+```bash
+cargo install --git https://github.com/JWo1F/serv --features highlight
+```
+
 ## Usage
 
 ```
@@ -136,14 +145,23 @@ extensions are all on: tables, task lists, footnotes, strikethrough. Links are
 pointed at the pages serv serves — `guide.md` becomes `guide` — and a link off
 the machine opens in its own tab. Front matter is dropped rather than printed,
 and every heading gets an anchor so the `#links` in a README land. Fenced code
-is set in plain monospace unless serv was built with `--features highlight`,
-which compiles in syntect for real grammars and costs several megabytes of
-binary to do it.
+is set in plain monospace unless highlighting was built in.
 
 A ```` ```mermaid ```` fence is drawn as a diagram. This is the one thing in
 serv that reaches the network: mermaid is a browser library with no Rust
 equivalent, so a page that draws a diagram — and only such a page — loads it
 from jsdelivr. Everything else still works with the cable out.
+
+**Syntax highlighting, with `--features highlight`.** Off by default, and a
+build-time choice rather than a flag: syntect carries a dump of TextMate
+grammars and the regex engine to run them, several times the size of serv
+itself. Built in, a fenced block that names a language it knows is marked up
+server-side; a language it does not know stays plain monospace, and so does a
+block that names nothing — a `mermaid` fence is a diagram either way. The
+markup is class-based rather than inline colours, so code takes its palette from
+the same stylesheet as the page and follows it into dark mode. With `-m`, the
+startup banner says which build you are running — `code highlighted` or `code
+plain`.
 
 **Nothing is cached in the server.** Every request reads the file from disk, so
 what you just saved is what gets sent. The one cache serv takes part in is the
