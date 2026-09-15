@@ -114,8 +114,12 @@ exactly as written.
 **A single file.** Point serv at a file rather than a folder and it serves
 that file at `/`, and nothing else — every other path, including the file's own
 name, gets the not-found page. Nothing around it is exposed: the folder it sits
-in is never listed and its neighbours are never served. `-m` still decides
-whether a `.md` file is rendered as a page or handed over as text, so
+in is never listed and its neighbours are never served — which includes the
+document's own pictures. An `<img>` or `![...](...)` pointing at a neighbouring
+file gets the not-found page like any other path, so a README with a poster in
+it wants `serv -m .` rather than `serv -m README.md`: a folder with no
+`index.html` opens its README anyway, with the images alongside it. `-m` still
+decides whether a `.md` file is rendered as a page or handed over as text, so
 `serv -m NOTES.md` reads a document in the browser while `serv NOTES.md` hands
 over the markdown. `-s` and `-n` both name a file inside a served folder, so
 serv refuses them here instead of ignoring them.
