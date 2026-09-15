@@ -9,14 +9,14 @@ to the browser.
 ```console
 $ serv
 
-  serv▌ 0.1.0
+  serv▌ 0.4.0
 
   ╭──────────────────────────╮
   │  http://127.0.0.1:8010/  │
   ╰──────────────────────────╯
 
   root         ~/site
-  contents     3 folders · 8 files · 412 kB
+  contents     3 folders · 8 files · 412.0 kB
   index        index.html
   not found    built-in page
   urls         clean · /about serves about.html
@@ -51,8 +51,8 @@ macOS on Apple Silicon or Intel, Linux on arm64 or x86_64. The Linux builds are
 statically linked against musl, so they run on any distribution.
 
 ```bash
-tar -xzf serv-0.1.1-aarch64-apple-darwin.tar.gz
-mv serv-0.1.1-aarch64-apple-darwin/serv /usr/local/bin/
+tar -xzf serv-0.4.0-aarch64-apple-darwin.tar.gz
+mv serv-0.4.0-aarch64-apple-darwin/serv /usr/local/bin/
 ```
 
 Or with cargo:
@@ -134,11 +134,11 @@ pointing serv at a project opens the project. HTML wins every collision, and
 without the flag a `.md` file is served exactly as it is on disk. GitHub's
 extensions are all on: tables, task lists, footnotes, strikethrough. Links are
 pointed at the pages serv serves — `guide.md` becomes `guide` — and a link off
-the machine opens in its own tab. Front
-matter is dropped rather than printed, and every heading gets an anchor so the
-`#links` in a README land. Fenced code is set in plain monospace unless serv was
-built with `--features highlight`, which compiles in syntect for real grammars
-and costs several megabytes of binary to do it.
+the machine opens in its own tab. Front matter is dropped rather than printed,
+and every heading gets an anchor so the `#links` in a README land. Fenced code
+is set in plain monospace unless serv was built with `--features highlight`,
+which compiles in syntect for real grammars and costs several megabytes of
+binary to do it.
 
 A ```` ```mermaid ```` fence is drawn as a diagram. This is the one thing in
 serv that reaches the network: mermaid is a browser library with no Rust
@@ -183,9 +183,10 @@ root, which catches a symlink pointing out of it.
 
 [hyper](https://hyper.rs) for HTTP/1, [tokio](https://tokio.rs) for the runtime,
 [clap](https://docs.rs/clap) for the command line, and
-[damask](https://github.com/jwo1f/damask) for the two pages serv draws itself —
-both compiled into the binary, with their stylesheet inlined, so they render with
-the network unplugged.
+[damask](https://github.com/jwo1f/damask) for the three pages serv draws itself
+— the directory listing, the not-found page and a rendered markdown document.
+All are compiled into the binary, with their stylesheet inlined, so they render
+with the network unplugged.
 
 ## License
 
