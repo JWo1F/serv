@@ -38,13 +38,8 @@ With Homebrew, on macOS or Linux:
 brew install jwo1f/tap/serv
 ```
 
-That pours a prebuilt binary — no Rust toolchain, nothing to compile. To follow
-releases with `brew upgrade`, tap it first:
-
-```bash
-brew tap jwo1f/tap
-brew install serv
-```
+That pours a prebuilt binary — no Rust toolchain, nothing to compile. The tap
+is added along the way, so `brew upgrade` follows releases from then on.
 
 Or grab a binary from the [latest release](https://github.com/JWo1F/serv/releases/latest) —
 macOS on Apple Silicon or Intel, Linux on arm64 or x86_64. The Linux builds are
