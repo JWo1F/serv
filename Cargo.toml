@@ -1,6 +1,6 @@
 [package]
 name = "serv"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 rust-version = "1.88"
 description = "A small, fast development server for static sites, single-page apps and markdown"
